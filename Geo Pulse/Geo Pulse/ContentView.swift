@@ -1,24 +1,11 @@
-//
-//  ContentView.swift
-//  Geo Pulse
-//
-//  Created by Induwara Jayaratna on 2026-10-17.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        RootView()
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView().environmentObject(AppState())
 }

@@ -1,17 +1,14 @@
-//
-//  Geo_PulseApp.swift
-//  Geo Pulse
-//
-//  Created by Induwara Jayaratna on 2026-10-17.
-//
-
 import SwiftUI
 
 @main
 struct Geo_PulseApp: App {
+    @StateObject private var appState = AppState()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environmentObject(appState)
+                .preferredColorScheme(.light)
         }
     }
 }
