@@ -4,9 +4,12 @@ import Combine
 
 @MainActor
 final class LocationService: NSObject, ObservableObject {
-    @Published var authorizationStatus: CLAuthorizationStatus
-    @Published var currentLocation: CLLocation?
-    @Published var monitoredRegions: Set<CLCircularRegion> = []
+    static let maxMonitoredRegions = 20
+
+    @Published private(set) var authorizationStatus: CLAuthorizationStatus
+    @Published private(set) var currentLocation: CLLocation?
+    @Published private(set) var monitoredSiteIds: Set<UUID> = []
+    @Published private(set) var enteredSiteIds: Set<UUID> = []
 
     private let manager = CLLocationManager()
 
@@ -15,7 +18,7 @@ final class LocationService: NSObject, ObservableObject {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.allowsBackgroundLocationUpdates = false
+        manager.distanceFilter = 25
     }
 
     func requestWhenInUseAuthorization() {
@@ -27,6 +30,7 @@ final class LocationService: NSObject, ObservableObject {
     }
 
     func startUpdating() {
+        guard authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse else { return }
         manager.startUpdatingLocation()
     }
 
@@ -34,55 +38,115 @@ final class LocationService: NSObject, ObservableObject {
         manager.stopUpdatingLocation()
     }
 
-    func monitor(site: Site) {
-        let region = CLCircularRegion(
-            center: site.coordinate,
-            radius: site.geofenceRadius,
-            identifier: site.id.uuidString
-        )
-        region.notifyOnEntry = true
-        region.notifyOnExit = true
-        manager.startMonitoring(for: region)
-        monitoredRegions.insert(region)
+    func enableBackgroundUpdates(_ enabled: Bool) {
+        guard authorizationStatus == .authorizedAlways else { return }
+        manager.allowsBackgroundLocationUpdates = enabled
+        manager.pausesLocationUpdatesAutomatically = !enabled
     }
 
-    func stopMonitoring(site: Site) {
-        for region in monitoredRegions where region.identifier == site.id.uuidString {
+    func monitorSites(_ sites: [Site]) {
+        guard authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse else { return }
+
+        stopAllMonitoring()
+
+        let origin = currentLocation
+        let nearest = sites.sorted { lhs, rhs in
+            guard let origin else { return false }
+            let a = CLLocation(latitude: lhs.latitude, longitude: lhs.longitude).distance(from: origin)
+            let b = CLLocation(latitude: rhs.latitude, longitude: rhs.longitude).distance(from: origin)
+            return a < b
+        }.prefix(Self.maxMonitoredRegions)
+
+        for site in nearest {
+            let region = CLCircularRegion(
+                center: site.coordinate,
+                radius: site.geofenceRadius,
+                identifier: site.id.uuidString
+            )
+            region.notifyOnEntry = true
+            region.notifyOnExit = true
+            manager.startMonitoring(for: region)
+            monitoredSiteIds.insert(site.id)
+            manager.requestState(for: region)
+        }
+    }
+
+    func stopAllMonitoring() {
+        for region in manager.monitoredRegions {
             manager.stopMonitoring(for: region)
-            monitoredRegions.remove(region)
+        }
+        monitoredSiteIds.removeAll()
+        enteredSiteIds.removeAll()
+    }
+
+    private func handleState(_ state: CLRegionState, for region: CLRegion) {
+        guard let circular = region as? CLCircularRegion,
+              let siteId = UUID(uuidString: circular.identifier) else { return }
+        switch state {
+        case .inside:
+            if enteredSiteIds.insert(siteId).inserted {
+                NotificationCenter.default.post(name: .geofenceDidEnter, object: nil, userInfo: ["siteId": siteId])
+            }
+        case .outside:
+            if enteredSiteIds.remove(siteId) != nil {
+                NotificationCenter.default.post(name: .geofenceDidExit, object: nil, userInfo: ["siteId": siteId])
+            }
+        case .unknown:
+            break
         }
     }
 }
 
 extension LocationService: CLLocationManagerDelegate {
-    nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         Task { @MainActor in
             self.authorizationStatus = status
+            if status == .authorizedWhenInUse {
+                self.requestAlwaysAuthorization()
+            }
+            if status == .authorizedAlways || status == .authorizedWhenInUse {
+                self.startUpdating()
+            }
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let latest = locations.last else { return }
         Task { @MainActor in
-            self.currentLocation = locations.last
+            self.currentLocation = latest
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
-        guard let circular = region as? CLCircularRegion else { return }
-        NotificationCenter.default.post(
-            name: .geofenceDidEnter,
-            object: nil,
-            userInfo: ["regionId": circular.identifier]
-        )
+        guard let circular = region as? CLCircularRegion,
+              let siteId = UUID(uuidString: circular.identifier) else { return }
+        Task { @MainActor in
+            if self.enteredSiteIds.insert(siteId).inserted {
+                NotificationCenter.default.post(name: .geofenceDidEnter, object: nil, userInfo: ["siteId": siteId])
+            }
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
-        guard let circular = region as? CLCircularRegion else { return }
-        NotificationCenter.default.post(
-            name: .geofenceDidExit,
-            object: nil,
-            userInfo: ["regionId": circular.identifier]
-        )
+        guard let circular = region as? CLCircularRegion,
+              let siteId = UUID(uuidString: circular.identifier) else { return }
+        Task { @MainActor in
+            if self.enteredSiteIds.remove(siteId) != nil {
+                NotificationCenter.default.post(name: .geofenceDidExit, object: nil, userInfo: ["siteId": siteId])
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didDetermineState state: CLRegionState, for region: CLRegion) {
+        Task { @MainActor in
+            self.handleState(state, for: region)
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
+        // Monitoring can fail if the device goes offline or the region overlaps too many others.
+        // We silently drop it — the app will re-register next time monitorSites is called.
     }
 }
 

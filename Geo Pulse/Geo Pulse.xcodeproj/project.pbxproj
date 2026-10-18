@@ -7,28 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		5E76068D3083932900107AB2 /* Geo Pulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Geo Pulse.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		5E7606A630839CCA00107AB2 /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
-		5E7606A730839CCA00107AB2 /* AppTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTypography.swift; sourceTree = "<group>"; };
-		5E7606A830839CCB00107AB2 /* CardContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardContainer.swift; sourceTree = "<group>"; };
-		5E7606A930839CCC00107AB2 /* StatusBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBadge.swift; sourceTree = "<group>"; };
-		5E7606AA30839CCC00107AB2 /* PrimaryButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButton.swift; sourceTree = "<group>"; };
-		5E7606AB30839CCD00107AB2 /* SectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionHeader.swift; sourceTree = "<group>"; };
-		5E7606AC30839CCE00107AB2 /* AppTopBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTopBar.swift; sourceTree = "<group>"; };
-		5E7606AD30839CFF00107AB2 /* Site.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Site.swift; sourceTree = "<group>"; };
-		5E7606AE30839CFF00107AB2 /* FieldTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FieldTask.swift; sourceTree = "<group>"; };
-		5E7606AF30839D0000107AB2 /* Inspection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Inspection.swift; sourceTree = "<group>"; };
-		5E7606B030839D0000107AB2 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
-		5E7606B130839D6300107AB2 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
-		5E7606B230839D6300107AB2 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
-		5E7606B330839D6400107AB2 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
-		5E7606B430839D6500107AB2 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
-		5E7606B530839D6500107AB2 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
-		5E7606B630839D6600107AB2 /* HazardClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HazardClassifier.swift; sourceTree = "<group>"; };
-		5E7606B730839D6600107AB2 /* SpeechService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechService.swift; sourceTree = "<group>"; };
-		5E7606B830839D6700107AB2 /* MotionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionService.swift; sourceTree = "<group>"; };
-		5E7606B930839D6800107AB2 /* CoreDataStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreDataStack.swift; sourceTree = "<group>"; };
-		5E7606BA30839D9D00107AB2 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		5E76068D3083932900107AB2 /* Geo Pulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Geo Pulse.app"; path = "/Users/induwarajayaratna/BSCCOMP/GeoPulse/Geo Pulse/build/Debug-iphoneos/Geo Pulse.app"; sourceTree = "<absolute>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -54,125 +33,7 @@
 			isa = PBXGroup;
 			children = (
 				5E76068F3083932900107AB2 /* Geo Pulse */,
-				5E76068E3083932900107AB2 /* Products */,
-				5E76069B30839C9200107AB2 /* Theme */,
-				5E76069C30839C9300107AB2 /* Components */,
-				5E76069D30839C9300107AB2 /* Models */,
-				5E76069E30839C9300107AB2 /* Services */,
-				5E76069F30839C9B00107AB2 /* Features */,
 			);
-			sourceTree = "<group>";
-		};
-		5E76068E3083932900107AB2 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				5E76068D3083932900107AB2 /* Geo Pulse.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		5E76069B30839C9200107AB2 /* Theme */ = {
-			isa = PBXGroup;
-			children = (
-				5E7606A630839CCA00107AB2 /* AppColors.swift */,
-				5E7606A730839CCA00107AB2 /* AppTypography.swift */,
-			);
-			path = Theme;
-			sourceTree = "<group>";
-		};
-		5E76069C30839C9300107AB2 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-				5E7606A830839CCB00107AB2 /* CardContainer.swift */,
-				5E7606A930839CCC00107AB2 /* StatusBadge.swift */,
-				5E7606AA30839CCC00107AB2 /* PrimaryButton.swift */,
-				5E7606AB30839CCD00107AB2 /* SectionHeader.swift */,
-				5E7606AC30839CCE00107AB2 /* AppTopBar.swift */,
-			);
-			path = Components;
-			sourceTree = "<group>";
-		};
-		5E76069D30839C9300107AB2 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				5E7606AD30839CFF00107AB2 /* Site.swift */,
-				5E7606AE30839CFF00107AB2 /* FieldTask.swift */,
-				5E7606AF30839D0000107AB2 /* Inspection.swift */,
-				5E7606B030839D0000107AB2 /* UserProfile.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		5E76069E30839C9300107AB2 /* Services */ = {
-			isa = PBXGroup;
-			children = (
-				5E7606B130839D6300107AB2 /* SampleData.swift */,
-				5E7606B230839D6300107AB2 /* AppState.swift */,
-				5E7606B330839D6400107AB2 /* LocationService.swift */,
-				5E7606B430839D6500107AB2 /* NotificationService.swift */,
-				5E7606B530839D6500107AB2 /* WeatherService.swift */,
-				5E7606B630839D6600107AB2 /* HazardClassifier.swift */,
-				5E7606B730839D6600107AB2 /* SpeechService.swift */,
-				5E7606B830839D6700107AB2 /* MotionService.swift */,
-				5E7606B930839D6800107AB2 /* CoreDataStack.swift */,
-			);
-			path = Services;
-			sourceTree = "<group>";
-		};
-		5E76069F30839C9B00107AB2 /* Features */ = {
-			isa = PBXGroup;
-			children = (
-				5E7606A030839CA500107AB2 /* Login */,
-				5E7606A130839CA500107AB2 /* Home */,
-				5E7606A230839CA500107AB2 /* Map */,
-				5E7606A330839CA500107AB2 /* Inspect */,
-				5E7606A430839CA500107AB2 /* Settings */,
-				5E7606A530839CA500107AB2 /* History */,
-			);
-			path = Features;
-			sourceTree = "<group>";
-		};
-		5E7606A030839CA500107AB2 /* Login */ = {
-			isa = PBXGroup;
-			children = (
-				5E7606BA30839D9D00107AB2 /* LoginView.swift */,
-			);
-			path = Login;
-			sourceTree = "<group>";
-		};
-		5E7606A130839CA500107AB2 /* Home */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Home;
-			sourceTree = "<group>";
-		};
-		5E7606A230839CA500107AB2 /* Map */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Map;
-			sourceTree = "<group>";
-		};
-		5E7606A330839CA500107AB2 /* Inspect */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Inspect;
-			sourceTree = "<group>";
-		};
-		5E7606A430839CA500107AB2 /* Settings */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Settings;
-			sourceTree = "<group>";
-		};
-		5E7606A530839CA500107AB2 /* History */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = History;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -225,7 +86,7 @@
 			mainGroup = 5E7606843083932900107AB2;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 5E76068E3083932900107AB2 /* Products */;
+			productRefGroup = 5E7606843083932900107AB2;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
