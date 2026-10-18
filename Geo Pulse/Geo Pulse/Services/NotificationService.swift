@@ -16,14 +16,31 @@ final class NotificationService: ObservableObject {
         }
     }
 
-    func scheduleGeofenceEntry(for siteName: String) {
+    func scheduleGeofenceEntry(for siteName: String, pendingTasks: Int) {
         let content = UNMutableNotificationContent()
-        content.title = "Entered \(siteName)"
-        content.body = "Tasks for this site are ready."
+        content.title = "Arrived at \(siteName)"
+        content.body = pendingTasks == 0
+            ? "No tasks scheduled for this site right now."
+            : "\(pendingTasks) task\(pendingTasks == 1 ? "" : "s") waiting. Tap to inspect."
         content.sound = .default
+        content.interruptionLevel = .timeSensitive
 
         let request = UNNotificationRequest(
             identifier: "geofence.enter.\(siteName)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    func scheduleGeofenceExit(for siteName: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Left \(siteName)"
+        content.body = "Inspection records will sync automatically when you reconnect."
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "geofence.exit.\(siteName)",
             content: content,
             trigger: nil
         )
