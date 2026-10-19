@@ -9,18 +9,23 @@ final class AppState: ObservableObject {
     @Published var sites: [Site]
     @Published var inspectionHistory: [Inspection]
     @Published var isAuthenticated: Bool
-    @Published var isLoneWorkerMonitoringOn: Bool
+    @Published var isLoneWorkerMonitoringOn: Bool {
+        didSet { loneWorkerMonitoringToggled() }
+    }
     @Published var geofenceAlertsOn: Bool
     @Published var severeWeatherAlertsOn: Bool
     @Published var lastSyncDate: Date
     @Published var loneWorkerTimerMinutesRemaining: Int
+    @Published var showFallAlert: Bool = false
 
     let locationService = LocationService()
     let notificationService = NotificationService()
+    let motionService = MotionService()
 
     private var cancellables: Set<AnyCancellable> = []
     private var entryObserver: NSObjectProtocol?
     private var exitObserver: NSObjectProtocol?
+    private var fallObserver: NSObjectProtocol?
 
     init() {
         self.currentUser = SampleData.currentUser
@@ -34,11 +39,13 @@ final class AppState: ObservableObject {
         self.loneWorkerTimerMinutesRemaining = 38
 
         observeGeofenceEvents()
+        observeFallEvents()
     }
 
     deinit {
         if let entryObserver { NotificationCenter.default.removeObserver(entryObserver) }
         if let exitObserver { NotificationCenter.default.removeObserver(exitObserver) }
+        if let fallObserver { NotificationCenter.default.removeObserver(fallObserver) }
     }
 
     var activeSite: Site? {
@@ -58,10 +65,27 @@ final class AppState: ObservableObject {
         isAuthenticated = false
         locationService.stopAllMonitoring()
         locationService.stopUpdating()
+        motionService.stopMonitoring()
     }
 
     func syncNow() {
         lastSyncDate = Date()
+    }
+
+    func simulateFall() {
+        motionService.simulateFall()
+    }
+
+    func cancelFallAlert() {
+        showFallAlert = false
+        motionService.acknowledgeFall()
+    }
+
+    func escalateFallAlert() {
+        showFallAlert = false
+        motionService.acknowledgeFall()
+        notificationService.scheduleFallDetectionAlert()
+        inspectionHistory.insert(SampleData.safetyIncident(for: activeSite?.name ?? currentUser.currentSiteName), at: 0)
     }
 
     func bootstrapSensors() async {
@@ -80,6 +104,20 @@ final class AppState: ObservableObject {
 
         locationService.startUpdating()
         locationService.monitorSites(sites)
+
+        if isLoneWorkerMonitoringOn {
+            motionService.startMonitoring()
+        }
+    }
+
+    private func loneWorkerMonitoringToggled() {
+        guard isAuthenticated else { return }
+        if isLoneWorkerMonitoringOn {
+            motionService.startMonitoring()
+        } else {
+            motionService.stopMonitoring()
+            showFallAlert = false
+        }
     }
 
     private func observeGeofenceEvents() {
@@ -99,6 +137,20 @@ final class AppState: ObservableObject {
         ) { [weak self] note in
             guard let siteId = note.userInfo?["siteId"] as? UUID else { return }
             Task { @MainActor in self?.handleExit(siteId: siteId) }
+        }
+    }
+
+    private func observeFallEvents() {
+        fallObserver = NotificationCenter.default.addObserver(
+            forName: .possibleFallDetected,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.isLoneWorkerMonitoringOn else { return }
+                self.showFallAlert = true
+            }
         }
     }
 
