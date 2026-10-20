@@ -3,7 +3,7 @@ import SwiftUI
 struct CardContainer<Content: View>: View {
     var padding: CGFloat = 16
     var cornerRadius: CGFloat = 18
-    let content: () -> Content
+    @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()

@@ -175,4 +175,19 @@ enum SampleData {
             syncState: .savedLocally
         )
     ]
+
+    static func safetyIncident(for siteName: String) -> Inspection {
+        Inspection(
+            taskId: UUID(),
+            siteName: siteName,
+            inspectorName: "Alex Mercer, PE",
+            completedAt: Date(),
+            durationMinutes: 0,
+            resultSummary: "Possible fall detected — alert sent to dispatch.",
+            passedCount: 0,
+            totalCount: 0,
+            statusTag: "Safety incident",
+            syncState: .savedLocally
+        )
+    }
 }

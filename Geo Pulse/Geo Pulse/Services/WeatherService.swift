@@ -4,7 +4,7 @@ import CoreLocation
 struct WeatherService {
     static let shared = WeatherService()
 
-    private let apiKey: String = "YOUR_OPENWEATHERMAP_API_KEY"
+    private let apiKey: String = "3aa1af71aeed19c3816a75659308635b"
     private let session: URLSession = .shared
 
     func fetchCurrent(for coordinate: CLLocationCoordinate2D) async throws -> WeatherSnapshot {

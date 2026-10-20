@@ -9,11 +9,23 @@ struct RootView: View {
     @State private var selectedTab: AppTab = .home
 
     var body: some View {
-        if !appState.isAuthenticated {
-            LoginView()
-        } else {
-            mainTabs
+        ZStack {
+            if !appState.isAuthenticated {
+                LoginView()
+            } else {
+                mainTabs
+            }
+
+            if appState.showFallAlert {
+                FallAlertView(
+                    onCancel: { appState.cancelFallAlert() },
+                    onEscalate: { appState.escalateFallAlert() }
+                )
+                .transition(.opacity)
+                .zIndex(100)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: appState.showFallAlert)
     }
 
     private var mainTabs: some View {

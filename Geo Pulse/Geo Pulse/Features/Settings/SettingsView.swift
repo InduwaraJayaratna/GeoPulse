@@ -122,6 +122,23 @@ struct SettingsView: View {
                 .padding(12)
                 .background(AppColors.surfaceAlt)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                Button {
+                    appState.simulateFall()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "waveform.path.ecg")
+                        Text("Simulate fall event")
+                            .font(AppTypography.captionBold())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(AppColors.accentWarning)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(AppColors.accentWarning, lineWidth: 1)
+                    )
+                }
             }
         }
     }
