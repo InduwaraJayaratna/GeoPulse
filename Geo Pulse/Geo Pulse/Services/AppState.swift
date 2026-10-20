@@ -17,15 +17,20 @@ final class AppState: ObservableObject {
     @Published var lastSyncDate: Date
     @Published var loneWorkerTimerMinutesRemaining: Int
     @Published var showFallAlert: Bool = false
+    @Published var activityFeed: [ActivityEvent] = []
+    @Published var syncStatus: SyncConnectionStatus = .connecting
 
     let locationService = LocationService()
     let notificationService = NotificationService()
     let motionService = MotionService()
+    let syncRepository: SyncRepository = MockSyncRepository()
 
     private var cancellables: Set<AnyCancellable> = []
     private var entryObserver: NSObjectProtocol?
     private var exitObserver: NSObjectProtocol?
     private var fallObserver: NSObjectProtocol?
+    private var feedTask: Task<Void, Never>?
+    private var statusTask: Task<Void, Never>?
 
     init() {
         self.currentUser = SampleData.currentUser
@@ -40,12 +45,15 @@ final class AppState: ObservableObject {
 
         observeGeofenceEvents()
         observeFallEvents()
+        startSyncFeed()
     }
 
     deinit {
         if let entryObserver { NotificationCenter.default.removeObserver(entryObserver) }
         if let exitObserver { NotificationCenter.default.removeObserver(exitObserver) }
         if let fallObserver { NotificationCenter.default.removeObserver(fallObserver) }
+        feedTask?.cancel()
+        statusTask?.cancel()
     }
 
     var activeSite: Site? {
@@ -85,7 +93,23 @@ final class AppState: ObservableObject {
         showFallAlert = false
         motionService.acknowledgeFall()
         notificationService.scheduleFallDetectionAlert()
-        inspectionHistory.insert(SampleData.safetyIncident(for: activeSite?.name ?? currentUser.currentSiteName), at: 0)
+        let incident = SampleData.safetyIncident(for: activeSite?.name ?? currentUser.currentSiteName)
+        inspectionHistory.insert(incident, at: 0)
+        activityFeed.insert(
+            ActivityEvent(
+                kind: .fallAlert,
+                actorName: currentUser.displayName,
+                siteName: incident.siteName,
+                summary: "Possible fall — alert escalated to Markus Vance"
+            ),
+            at: 0
+        )
+        Task { await syncRepository.publish(inspection: incident) }
+    }
+
+    func recordInspectionCompleted(_ inspection: Inspection) {
+        inspectionHistory.insert(inspection, at: 0)
+        Task { await syncRepository.publish(inspection: inspection) }
     }
 
     func bootstrapSensors() async {
@@ -108,6 +132,35 @@ final class AppState: ObservableObject {
         if isLoneWorkerMonitoringOn {
             motionService.startMonitoring()
         }
+
+        await refreshWeatherForAllSites()
+    }
+
+    func refreshWeatherForAllSites() async {
+        await withTaskGroup(of: (UUID, WeatherSnapshot?).self) { group in
+            for site in sites {
+                group.addTask {
+                    let snapshot = try? await WeatherService.shared.fetchCurrent(for: site.coordinate)
+                    return (site.id, snapshot)
+                }
+            }
+            for await (siteId, snapshot) in group {
+                if let snapshot, let index = sites.firstIndex(where: { $0.id == siteId }) {
+                    sites[index].weather = snapshot
+                }
+            }
+        }
+    }
+
+    func refreshWeather(for siteId: UUID) async {
+        guard let site = sites.first(where: { $0.id == siteId }) else { return }
+        if let snapshot = try? await WeatherService.shared.fetchCurrent(for: site.coordinate),
+           let index = sites.firstIndex(where: { $0.id == siteId }) {
+            sites[index].weather = snapshot
+            if let warning = snapshot.severeWarning, severeWeatherAlertsOn {
+                notificationService.scheduleGeofenceEntry(for: "\(site.name) · \(warning)", pendingTasks: site.tasks.count)
+            }
+        }
     }
 
     private func loneWorkerMonitoringToggled() {
@@ -117,6 +170,33 @@ final class AppState: ObservableObject {
         } else {
             motionService.stopMonitoring()
             showFallAlert = false
+        }
+    }
+
+    private func startSyncFeed() {
+        feedTask = Task { [weak self] in
+            guard let self else { return }
+            for await event in self.syncRepository.activityFeed() {
+                await MainActor.run {
+                    self.activityFeed.insert(event, at: 0)
+                    if self.activityFeed.count > 40 {
+                        self.activityFeed.removeLast(self.activityFeed.count - 40)
+                    }
+                }
+            }
+        }
+
+        statusTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await MainActor.run {
+                    self.syncStatus = self.syncRepository.connectionStatus
+                    if self.syncStatus == .live {
+                        self.lastSyncDate = Date()
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
         }
     }
 
@@ -164,6 +244,8 @@ final class AppState: ObservableObject {
         if geofenceAlertsOn {
             notificationService.scheduleGeofenceEntry(for: site.name, pendingTasks: site.tasks.count)
         }
+
+        Task { await refreshWeather(for: siteId) }
     }
 
     private func handleExit(siteId: UUID) {

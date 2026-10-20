@@ -30,6 +30,7 @@ struct HomeView: View {
                     scheduleProgressCard
                     priorityActionItems
                     nearbyPerimeter
+                    liveActivityFeed
                     unscheduledFindingCard
                     Spacer(minLength: 24)
                 }
@@ -261,6 +262,94 @@ struct HomeView: View {
                 }
             }
         }
+    }
+
+    private var liveActivityFeed: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionHeader(title: "Live Team Activity")
+                Spacer()
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(appState.syncStatus == .live ? AppColors.accentSuccess : AppColors.textTertiary)
+                        .frame(width: 6, height: 6)
+                    Text(appState.syncStatus.displayText)
+                        .font(AppTypography.label())
+                        .foregroundStyle(AppColors.textSecondary)
+                }
+            }
+            CardContainer {
+                if appState.activityFeed.isEmpty {
+                    HStack(spacing: 10) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .foregroundStyle(AppColors.textTertiary)
+                        Text("Waiting for team sync…")
+                            .font(AppTypography.caption())
+                            .foregroundStyle(AppColors.textSecondary)
+                    }
+                    .padding(.vertical, 6)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(appState.activityFeed.prefix(4)) { event in
+                            activityRow(event)
+                            if event.id != appState.activityFeed.prefix(4).last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func activityRow(_ event: ActivityEvent) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(activityTone(event.kind).opacity(0.15))
+                    .frame(width: 32, height: 32)
+                Image(systemName: activityIcon(event.kind))
+                    .foregroundStyle(activityTone(event.kind))
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.actorName)
+                    .font(AppTypography.captionBold())
+                    .foregroundStyle(AppColors.textPrimary)
+                Text(event.summary)
+                    .font(AppTypography.caption())
+                    .foregroundStyle(AppColors.textSecondary)
+                    .lineLimit(2)
+                Text("\(event.siteName) · \(relativeTime(event.occurredAt))")
+                    .font(AppTypography.label())
+                    .foregroundStyle(AppColors.textTertiary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func activityIcon(_ kind: ActivityEvent.Kind) -> String {
+        switch kind {
+        case .taskAssigned: return "person.badge.plus"
+        case .inspectionLogged: return "checkmark.seal.fill"
+        case .hazardFlagged: return "exclamationmark.triangle.fill"
+        case .fallAlert: return "waveform.path.ecg"
+        }
+    }
+
+    private func activityTone(_ kind: ActivityEvent.Kind) -> Color {
+        switch kind {
+        case .taskAssigned: return AppColors.primary
+        case .inspectionLogged: return AppColors.accentSuccess
+        case .hazardFlagged: return AppColors.accentWarning
+        case .fallAlert: return .red
+        }
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     private var unscheduledFindingCard: some View {

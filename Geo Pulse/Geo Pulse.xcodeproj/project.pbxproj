@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		5E76068D3083932900107AB2 /* Geo Pulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Geo Pulse.app"; path = "/Users/induwarajayaratna/BSCCOMP/GeoPulse/Geo Pulse/build/Debug-iphoneos/Geo Pulse.app"; sourceTree = "<absolute>"; };
+		5E861FB330853CEC000BE6CA /* Geo Pulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Geo Pulse.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +33,7 @@
 			isa = PBXGroup;
 			children = (
 				5E76068F3083932900107AB2 /* Geo Pulse */,
+				5E861FB330853CEC000BE6CA /* Geo Pulse.app */,
 			);
 			sourceTree = "<group>";
 		};
@@ -58,7 +59,7 @@
 			packageProductDependencies = (
 			);
 			productName = "Geo Pulse";
-			productReference = 5E76068D3083932900107AB2 /* Geo Pulse.app */;
+			productReference = 5E861FB330853CEC000BE6CA /* Geo Pulse.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
