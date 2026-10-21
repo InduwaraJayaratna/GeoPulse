@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Geo Pulse</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+
+	<key>OPENWEATHER_API_KEY</key>
+	<string>$(OPENWEATHER_API_KEY)</string>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GeoPulse uses your location to detect when you enter or leave a job site and to fetch localised weather.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>GeoPulse monitors job site geofences in the background so inspection tasks appear the moment you arrive on site.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>GeoPulse uses the camera to capture inspection photos for on-device hazard analysis.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GeoPulse records voice notes during inspections for hands-free hazard logging.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>GeoPulse transcribes your voice notes on-device so you can log hazards without stopping work.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>GeoPulse uses motion sensors to detect falls during lone-worker monitoring and escalate alerts automatically.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GeoPulse reads selected photos to attach them to inspection records.</string>
+
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
+
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
+
+	<key>UILaunchScreen</key>
+	<dict/>
+
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
