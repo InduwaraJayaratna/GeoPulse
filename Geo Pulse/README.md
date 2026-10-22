@@ -1,110 +1,110 @@
 # GeoPulse
 
-**Geofenced Smart Field Operations Platform**
-
-GeoPulse is a native iOS field-operations app that binds inspection and maintenance tasks directly to physical GPS geofences. The moment a worker enters a job-site boundary, the app surfaces that site's pending tasks, fetches localised weather, and enables hands-free hazard logging via voice and on-device image classification.
-
----
-
-## Target users
-
-Mobile field professionals — site engineers, safety inspectors, facilities technicians — who manage inspection work across physical sites and need their phone to react to location instead of waiting for taps.
+**Geofenced Smart Field Operations Platform** — a native iOS app for mobile field professionals (site engineers, safety inspectors, facilities technicians) that binds inspection and maintenance tasks directly to physical GPS geofences. On arrival at a job site, the app surfaces that site's pending tasks, fetches localised weather, runs on-device hazard classification on captured photos, and automatically escalates safety alerts when motion sensors detect a fall.
 
 ---
 
 ## Core workflow
 
-1. **Arrival** — iPhone detects geofence entry and raises a local notification with that site's open tasks.
-2. **Inspection** — Worker opens a task, captures a photo, and an on-device Core ML classifier flags likely hazards (cracks, corrosion, exposed wiring) with a confidence score.
-3. **Hands-free log** — Voice note is transcribed on-device via the Speech framework while the worker continues working.
-4. **Save & sync** — Record saves to Core Data locally first ("Saved locally"), then syncs to Firestore when connectivity returns ("Synced to team").
-5. **Safety** — While lone-worker monitoring is active, Core Motion watches for fall-pattern events. If detected, a 30-second countdown runs; if uncancelled, the alert and last-known location escalate to the nominated contact.
-
----
-
-## Features (MVP)
-
-| # | Feature | Description |
-|---|---------|-------------|
-| 1 | Job Sites & Tasks | Drop a map pin, set a geofence radius, assign tasks per site |
-| 2 | Settings | Lone-worker toggle, notification preferences, sync status |
-| 3 | Home Dashboard | Live geofence card, today's tasks, sync indicator |
-| 4 | External API | OpenWeatherMap weather + Firestore team sync |
-| 5 | Push Notifications | Geofence entry/exit, recheck reminders, fall alerts |
-| 6 | Core Data | Offline-first storage for sites, tasks, photos, notes |
-| 7 | Inspection Flow | Photo + Core ML hazard tag + voice note + save |
-| 8 | History | Completed inspections and hazards, filterable |
-| 9 | Lone-Worker Monitoring | Fall detection with countdown and auto-escalation |
-
----
-
-## Advanced SDK integrations
-
-- **MapKit + Core Location** — `CLCircularRegion` geofences drive the whole task workflow (primary advanced feature)
-- **Vision + Core ML** — On-device photo classification with no network call (primary advanced feature)
-- **Core Motion** — Accelerometer/gyroscope fusion for fall detection
-- **Firebase Firestore** — Real-time task assignment and live manager activity feed
-- **Speech framework** — On-device speech-to-text for voice logging
-- **WidgetKit** — Home-screen widget for nearest site, task count, and weather (stretch)
+1. **Arrival** — iPhone detects geofence entry via `CLCircularRegion` and raises a time-sensitive local notification with that site's open tasks.
+2. **Inspection** — Worker opens a task, captures a photo via the native camera, and an on-device `VNClassifyImageRequest` flags likely hazards (corrosion, cracks, exposed wiring, fluid leaks, debris, smoke) with a confidence score.
+3. **Hands-free log** — Voice note is transcribed live via `SFSpeechRecognizer` while the worker continues working.
+4. **Review & save** — Review screen shows the real captured hazard + transcript. Signing writes an `Inspection` record to Core Data (survives relaunch) and publishes it to the team activity feed.
+5. **Report** — Share PDF Report renders a one-page audit document via `ImageRenderer` and hands it to the system share sheet.
+6. **Safety** — While lone-worker monitoring is on, Core Motion watches for a fall-pattern event. A full-screen 30-second countdown appears; if uncancelled, a critical alert and last-known location escalate to the nominated contact.
 
 ---
 
 ## Architecture
 
-MVVM-ish with dependency-injected service objects:
+MVVM-ish with dependency-injected services. `AppState` is the single `ObservableObject` root; services are stored on it as `let` properties so they're trivially swappable in tests.
 
 ```
 Geo Pulse/
 ├── Theme/              AppColors, AppTypography
-├── Components/         Reusable UI (cards, badges, buttons, top bar)
-├── Models/             Site, FieldTask, Inspection, UserProfile
+├── Components/         Reusable UI (CardContainer, StatusBadge, PrimaryButton,
+│                       SectionHeader, AppTopBar, CameraPicker)
+├── Models/
+│   ├── Site, FieldTask, Inspection, UserProfile
+│   └── InspectionDraft (in-flight data between Inspect ⇄ Review)
 ├── Services/
-│   ├── AppState            Root ObservableObject
-│   ├── LocationService     CoreLocation + geofencing
-│   ├── NotificationService UserNotifications wrapper
-│   ├── WeatherService      OpenWeatherMap client
-│   ├── HazardClassifier    Vision + Core ML wrapper
-│   ├── SpeechService       SFSpeechRecognizer wrapper
-│   ├── MotionService       Core Motion fall detection
-│   ├── CoreDataStack       Programmatic Core Data model
-│   └── SampleData          Seed data for previews
+│   ├── AppState            Root ObservableObject; owns all services
+│   ├── LocationService     CoreLocation + geofencing (20-region cap, auto Always-promotion)
+│   ├── NotificationService UserNotifications (geofence entry/exit, fall, recheck)
+│   ├── WeatherService      OpenWeatherMap client, key from xcconfig → Info.plist
+│   ├── HazardClassifier    Vision VNClassifyImageRequest + keyword mapping
+│   ├── SpeechService       SFSpeechRecognizer live transcription
+│   ├── MotionService       Core Motion fall detection (impact + stillness)
+│   ├── BiometricService    LocalAuthentication (Face ID / Touch ID / passcode)
+│   ├── CoreDataStack       Programmatic model, SQLite persistence of inspections
+│   ├── PDFReportBuilder    SwiftUI ImageRenderer → one-page PDF
+│   ├── SyncRepository      Protocol for team-sync backend
+│   ├── MockSyncRepository  In-memory async-stream implementation
+│   └── SampleData          Seed data for first launch
 ├── Features/
-│   ├── Login
-│   ├── Home
-│   ├── Map
-│   ├── Inspect             + OpenInspection, ViewTask, ReviewSignOff, CertifiedReport
-│   ├── Settings
-│   ├── History
-│   └── Map/SiteDossier
-├── RootView.swift      Custom tab bar + auth gate
-└── Geo_PulseApp.swift  App entry
+│   ├── Login               Email + password + Face/Touch ID
+│   ├── Home                Dashboard, priority tasks, live team activity feed
+│   ├── Map                 MapKit with geofence overlays + site detail
+│   ├── Inspect             Capture + voice + Vision + Review + Certified Report
+│   ├── Settings            Lone-worker toggle, sync, notifications, history, simulate fall
+│   ├── Safety              Full-screen fall alert overlay with countdown
+│   ├── History             Persisted inspection list
+│   └── iPad                NavigationSplitView site-manager layout
+├── RootView.swift          Auth gate + size-class switch (phone tabs vs iPad split)
+└── Geo_PulseApp.swift      App entry
 ```
 
----
-
-## UI structure
-
-**iPhone — 4-tab layout for one-handed field use:**
-- **Home** — status, priority tasks, nearby sectors, quick log
-- **Map** — interactive geofence map, site detail bottom sheet, dossier
-- **Inspect** — task detail with voice capture, camera, hazard analysis
-- **Settings** — profile, lone-worker toggle, notifications, sync, history
-
-**iPad (planned)** — `NavigationSplitView` site-manager overview with sidebar, map, task assignment, Swift Charts analytics, and a real-time team activity feed.
+**Key architectural decisions:**
+- **Programmatic Core Data model** (no `.xcdatamodeld`) keeps the project navigator clean and avoids the schema-editor file-format churn in version control.
+- **Protocol-based sync layer** (`SyncRepository`) lets the UI consume an `AsyncStream<ActivityEvent>` without caring whether events come from an in-memory simulator or Firestore. Swap is a one-line change in `AppState` — see `FirebaseSetup.md`.
+- **Device-adaptive root** — `RootView` reads `horizontalSizeClass`. iPhone portrait gets the 4-tab UI; iPad / iPhone Max landscape gets the three-column `NavigationSplitView` (sidebar / site detail / team activity).
+- **Secrets via xcconfig** — `Secrets.xcconfig` holds `OPENWEATHER_API_KEY`; the project's build configuration file setting pipes it into `Info.plist` via `$(…)` substitution, which `WeatherService` reads at runtime. The xcconfig is `.gitignore`d and excluded from the app bundle.
 
 ---
 
-## Platform frameworks
+## Platform & SDK coverage
 
-Swift / SwiftUI · MapKit · CoreLocation · Vision · CoreML · UserNotifications · CoreData · AVFoundation · Speech · CoreMotion · PhotosUI · Combine
+### Mandatory (Component 2)
+| Feature | Framework | Role |
+|---------|-----------|------|
+| Push notifications | `UserNotifications` | Geofence entry/exit, recheck reminders, fall alerts |
+| Local persistence | `CoreData` | Inspection records (SQLite, survive relaunch) |
+| External API | `OpenWeatherMap REST` | Live weather + severe-warning JSON per site |
+
+### Primary advanced (Component 3)
+| Feature | Framework |
+|---------|-----------|
+| Geofenced task automation | `MapKit` + `CoreLocation` (`CLCircularRegion`) |
+| On-device hazard classification | `Vision` + `CoreML` (`VNClassifyImageRequest`) |
+
+### Supporting / stretch (Component 5)
+| Feature | Framework |
+|---------|-----------|
+| Fall detection | `CoreMotion` (accelerometer + gyroscope) |
+| Voice logging | `Speech` (`SFSpeechRecognizer`) |
+| Biometric sign-in | `LocalAuthentication` (`LAContext`) |
+| PDF export | SwiftUI `ImageRenderer` + `CoreGraphics` PDF context |
+| iPad site-manager view | SwiftUI `NavigationSplitView` |
+| Real-time team sync | `SyncRepository` protocol (mock), Firestore swap documented |
+
+### Not used (per proposal)
+- Face ID *not* chosen as a Component 2 feature (Push Notifications + Core Data are the two) — Face ID is used only as login-UX polish.
+- CloudKit, WidgetKit — documented as stretch; not implemented.
 
 ---
 
-## Requirements
+## Permissions
 
-- Xcode 26.5+
-- iOS 26.5+ deployment target
-- Signing: automatic (Personal team is fine for development)
+Declared in `Geo-Pulse-Info.plist`:
+
+- `NSLocationWhenInUseUsageDescription` + `NSLocationAlwaysAndWhenInUseUsageDescription`
+- `NSCameraUsageDescription`
+- `NSMicrophoneUsageDescription`
+- `NSSpeechRecognitionUsageDescription`
+- `NSMotionUsageDescription`
+- `NSPhotoLibraryUsageDescription`
+- `NSFaceIDUsageDescription`
+- `UIBackgroundModes` → `location`, `fetch`
 
 ---
 
@@ -113,31 +113,24 @@ Swift / SwiftUI · MapKit · CoreLocation · Vision · CoreML · UserNotificatio
 ```sh
 git clone https://github.com/InduwaraJayaratna/GeoPulse.git
 cd GeoPulse
+cp "Secrets.xcconfig.example" "Secrets.xcconfig"   # if an example is provided
+# then edit Secrets.xcconfig and paste your OpenWeatherMap API key
 open "Geo Pulse/Geo Pulse.xcodeproj"
 ```
 
-Build and run on an iPhone simulator or device. On first launch the app shows the Login screen — tap **Sign In to Active Shift** to enter the main tab experience (authentication is stubbed in the current MVP).
+Build and run on an iPhone or iPad simulator (iOS 26.5+). The Login screen appears first — sign in with the pre-filled credentials, or tap **Face / Touch ID**.
 
----
-
-## Permissions
-
-The app requires the following privacy permissions, declared via `INFOPLIST_KEY_*` settings:
-
-- **Location (When In Use + Always)** — Geofence monitoring in foreground and background
-- **Camera** — Capture inspection photos
-- **Microphone** — Record voice notes
-- **Speech Recognition** — Transcribe voice notes on-device
-- **Motion** — Fall detection for lone-worker monitoring
-- **Photo Library** — Attach existing photos to inspections
-
-Background Modes: **Location updates** and **Background fetch**.
+**Simulator tips:**
+- **Features → Face ID → Enrolled** before tapping the biometric card
+- **Features → Location → Custom Location…** inside Riverside / Baton Rouge coords to trigger geofence entry
+- Camera isn't available on simulator; Inspect falls back to photo library automatically
+- **Settings → Simulate fall event** triggers the fall-detection flow without having to actually drop the phone
 
 ---
 
 ## Status
 
-This is the Component 2 MVP scaffold. All nine MVP screens are implemented with navigation, sample data, and the advertised sensor hooks. Firebase Firestore wiring, Core ML model binding, and the iPad analytics dashboard are the main items still to land before full assessment.
+The MVP is feature-complete against the proposal's nine items. The remaining stretch work (Firestore real backend, WidgetKit, CloudKit) is documented but not implemented — see `FirebaseSetup.md` for the one-line swap to real Firestore. All screens match the Figma mockups and all referenced sensor hooks are real, not stubs.
 
 ---
 

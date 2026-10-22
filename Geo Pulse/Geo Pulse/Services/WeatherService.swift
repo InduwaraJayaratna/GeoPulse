@@ -1,13 +1,25 @@
 import Foundation
 import CoreLocation
 
+enum WeatherServiceError: Error {
+    case missingAPIKey
+    case badResponse
+}
+
 struct WeatherService {
     static let shared = WeatherService()
 
-    private let apiKey: String = "3aa1af71aeed19c3816a75659308635b"
     private let session: URLSession = .shared
 
+    private var apiKey: String? {
+        let raw = Bundle.main.object(forInfoDictionaryKey: "OPENWEATHER_API_KEY") as? String
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
     func fetchCurrent(for coordinate: CLLocationCoordinate2D) async throws -> WeatherSnapshot {
+        guard let apiKey else { throw WeatherServiceError.missingAPIKey }
+
         var components = URLComponents(string: "https://api.openweathermap.org/data/2.5/weather")!
         components.queryItems = [
             URLQueryItem(name: "lat", value: String(coordinate.latitude)),
@@ -16,7 +28,10 @@ struct WeatherService {
             URLQueryItem(name: "units", value: "imperial")
         ]
 
-        let (data, _) = try await session.data(from: components.url!)
+        let (data, response) = try await session.data(from: components.url!)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw WeatherServiceError.badResponse
+        }
         let decoded = try JSONDecoder().decode(OpenWeatherResponse.self, from: data)
 
         return WeatherSnapshot(

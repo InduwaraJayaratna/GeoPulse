@@ -35,13 +35,18 @@ final class AppState: ObservableObject {
     init() {
         self.currentUser = SampleData.currentUser
         self.sites = SampleData.sites
-        self.inspectionHistory = SampleData.historyInspections
         self.isAuthenticated = false
         self.isLoneWorkerMonitoringOn = true
         self.geofenceAlertsOn = true
         self.severeWeatherAlertsOn = true
         self.lastSyncDate = Date().addingTimeInterval(-240)
         self.loneWorkerTimerMinutesRemaining = 38
+
+        // Load persisted inspections from Core Data, then overlay seed records
+        // only if there's nothing stored yet (so a fresh install still shows
+        // examples but subsequent launches reflect real work).
+        let persisted = CoreDataStack.shared.fetchAllInspections()
+        self.inspectionHistory = persisted.isEmpty ? SampleData.historyInspections : persisted
 
         observeGeofenceEvents()
         observeFallEvents()
@@ -108,8 +113,36 @@ final class AppState: ObservableObject {
     }
 
     func recordInspectionCompleted(_ inspection: Inspection) {
+        CoreDataStack.shared.saveInspection(inspection)
         inspectionHistory.insert(inspection, at: 0)
         Task { await syncRepository.publish(inspection: inspection) }
+    }
+
+    func completeInspection(from draft: InspectionDraft, certifies: Bool) -> Inspection {
+        let now = Date()
+        let duration = max(1, Int(now.timeIntervalSince(draft.startedAt) / 60))
+        let statusTag = (draft.hazardTag != nil) ? "Conditional" : "Verified"
+        let resultSummary = draft.hazardTag.map { "Flagged \($0) during \(draft.task.title)." }
+            ?? "All checkpoints nominal for \(draft.task.title)."
+
+        let inspection = Inspection(
+            taskId: draft.task.id,
+            siteName: draft.task.siteName,
+            inspectorName: currentUser.displayName,
+            completedAt: now,
+            durationMinutes: duration,
+            resultSummary: resultSummary,
+            passedCount: certifies ? 7 : 6,
+            totalCount: 7,
+            statusTag: statusTag,
+            hazardTag: draft.hazardTag,
+            hazardConfidence: draft.hazardConfidence,
+            voiceNote: draft.voiceNote,
+            photoName: draft.photoName,
+            syncState: .savedLocally
+        )
+        recordInspectionCompleted(inspection)
+        return inspection
     }
 
     func bootstrapSensors() async {

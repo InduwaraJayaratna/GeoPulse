@@ -6,12 +6,17 @@ enum AppTab: Hashable {
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedTab: AppTab = .home
+
+    private var isWide: Bool { horizontalSizeClass == .regular }
 
     var body: some View {
         ZStack {
             if !appState.isAuthenticated {
                 LoginView()
+            } else if isWide {
+                IPadRootView()
             } else {
                 mainTabs
             }

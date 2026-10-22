@@ -12,10 +12,29 @@ struct InspectView: View {
     @State private var hazardResult: HazardClassificationResult?
     @State private var transcript: String = "\"Pressure reading is 142 PSI. Slight oxidation on flange bolts.\""
     @State private var recordingSeconds: Int = 8
-    @State private var showReview: Bool = false
+    @State private var pendingDraft: InspectionDraft?
+    @State private var inspectionStartedAt: Date = Date()
+    @State private var showSourceChooser: Bool = false
+    @State private var showCamera: Bool = false
+    @State private var showLibrary: Bool = false
 
     init() {
         _selectedTask = State(initialValue: SampleData.tasks[0])
+    }
+
+    private var currentDraft: InspectionDraft {
+        let liveTranscript = speech.transcript.isEmpty ? nil : speech.transcript
+        let fallbackNote = liveTranscript ?? transcript.trimmingCharacters(in: .init(charactersIn: "\""))
+        let hazardLabel = hazardResult.map { $0.label == "No hazard detected" ? nil : $0.label } ?? "Surface corrosion"
+        let hazardConfidence = hazardResult?.confidence ?? 0.94
+        return InspectionDraft(
+            task: selectedTask,
+            hazardTag: hazardLabel,
+            hazardConfidence: hazardLabel == nil ? nil : hazardConfidence,
+            voiceNote: fallbackNote.isEmpty ? nil : fallbackNote,
+            photoName: capturedImage == nil ? nil : "capture-\(selectedTask.id.uuidString.prefix(6)).jpg",
+            startedAt: inspectionStartedAt
+        )
     }
 
     var body: some View {
@@ -27,7 +46,7 @@ struct InspectView: View {
                     voiceCard
                     visualCaptureCard
                     PrimaryButton(title: "Complete Inspection & Review", icon: "checkmark.circle") {
-                        showReview = true
+                        pendingDraft = currentDraft
                     }
                     Spacer(minLength: 24)
                 }
@@ -36,9 +55,9 @@ struct InspectView: View {
             }
         }
         .background(AppColors.background.ignoresSafeArea())
-        .sheet(isPresented: $showReview) {
+        .sheet(item: $pendingDraft) { draft in
             NavigationStack {
-                ReviewSignOffView(task: selectedTask)
+                ReviewSignOffView(draft: draft)
             }
         }
         .task { await speech.requestAuthorization() }
@@ -224,10 +243,16 @@ struct InspectView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
-                PhotosPicker(selection: $photoItem, matching: .images) {
+                Button {
+                    if CameraPicker.isCameraAvailable {
+                        showSourceChooser = true
+                    } else {
+                        showLibrary = true
+                    }
+                } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "camera")
-                        Text("Retake Photo")
+                        Image(systemName: capturedImage == nil ? "camera" : "camera.rotate")
+                        Text(capturedImage == nil ? "Capture Photo" : "Retake Photo")
                             .font(AppTypography.bodyBold())
                     }
                     .frame(maxWidth: .infinity)
@@ -235,6 +260,18 @@ struct InspectView: View {
                     .foregroundStyle(AppColors.textPrimary)
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppColors.divider, lineWidth: 1))
                 }
+                .confirmationDialog("Capture inspection photo", isPresented: $showSourceChooser, titleVisibility: .visible) {
+                    Button("Take Photo") { showCamera = true }
+                    Button("Choose from Library") { showLibrary = true }
+                    Button("Cancel", role: .cancel) {}
+                }
+                .fullScreenCover(isPresented: $showCamera) {
+                    CameraPicker { image in
+                        Task { await handleCapturedImage(image) }
+                    }
+                    .ignoresSafeArea()
+                }
+                .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
                 .onChange(of: photoItem) { _, newItem in
                     Task { await loadImage(newItem) }
                 }
@@ -275,13 +312,17 @@ struct InspectView: View {
         guard let item else { return }
         if let data = try? await item.loadTransferable(type: Data.self),
            let image = UIImage(data: data) {
-            capturedImage = image
-            isAnalyzing = true
-            hazardResult = nil
-            let result = await HazardClassifier.shared.classify(image: image)
-            isAnalyzing = false
-            hazardResult = result
+            await handleCapturedImage(image)
         }
+    }
+
+    private func handleCapturedImage(_ image: UIImage) async {
+        capturedImage = image
+        isAnalyzing = true
+        hazardResult = nil
+        let result = await HazardClassifier.shared.classify(image: image)
+        isAnalyzing = false
+        hazardResult = result
     }
 }
 
