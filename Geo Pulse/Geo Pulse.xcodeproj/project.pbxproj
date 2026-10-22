@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		5E861FB330853CEC000BE6CA /* Geo Pulse.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Geo Pulse.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E8620BD3087F0D6000BE6CA /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +35,7 @@
 			children = (
 				5E76068F3083932900107AB2 /* Geo Pulse */,
 				5E861FB330853CEC000BE6CA /* Geo Pulse.app */,
+				5E8620BD3087F0D6000BE6CA /* Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -119,6 +121,7 @@
 /* Begin XCBuildConfiguration section */
 		5E7606963083932A00107AB2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5E8620BD3087F0D6000BE6CA /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -182,6 +185,7 @@
 		};
 		5E7606973083932A00107AB2 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5E8620BD3087F0D6000BE6CA /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -238,13 +242,15 @@
 		};
 		5E7606993083932A00107AB2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5E8620BD3087F0D6000BE6CA /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Geo Pulse/Geo-Pulse-Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -269,13 +275,15 @@
 		};
 		5E76069A3083932A00107AB2 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5E8620BD3087F0D6000BE6CA /* Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Geo Pulse/Geo-Pulse-Info.plist";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

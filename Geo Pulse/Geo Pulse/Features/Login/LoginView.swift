@@ -2,11 +2,14 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject private var appState: AppState
+    @StateObject private var biometrics = BiometricService()
 
     @State private var email: String = "alex.mercer@energy.org"
     @State private var password: String = "••••••"
     @State private var rememberHardware: Bool = true
     @State private var showPassword: Bool = false
+    @State private var isAuthenticating: Bool = false
+    @State private var authError: String?
 
     var body: some View {
         ScrollView {
@@ -163,13 +166,20 @@ struct LoginView: View {
 
     private var biometricRow: some View {
         HStack(spacing: 14) {
-            biometricCard(
-                icon: "touchid",
-                title: "Face / Touch ID",
-                subtitle: "Biometric quick unlock",
-                caption: "Ready to scan",
-                captionColor: AppColors.primary
-            )
+            Button {
+                triggerBiometricAuth()
+            } label: {
+                biometricCard(
+                    icon: biometrics.availability.icon,
+                    title: biometricCardTitle,
+                    subtitle: biometricCardSubtitle,
+                    caption: biometricCardCaption,
+                    captionColor: biometricCardCaptionColor
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isAuthenticating || isUnavailable)
+
             biometricCard(
                 icon: "dot.radiowaves.left.and.right",
                 title: "Physical Badge",
@@ -177,6 +187,62 @@ struct LoginView: View {
                 caption: "Tap top of device",
                 captionColor: AppColors.accentWarning
             )
+        }
+    }
+
+    private var isUnavailable: Bool {
+        if case .unavailable = biometrics.availability { return true }
+        return false
+    }
+
+    private var biometricCardTitle: String {
+        switch biometrics.availability {
+        case .faceID: return "Face ID"
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        case .passcodeOnly: return "Device Passcode"
+        case .unavailable: return "Biometrics Off"
+        }
+    }
+
+    private var biometricCardSubtitle: String {
+        switch biometrics.availability {
+        case .unavailable: return "Not enrolled on this device"
+        case .passcodeOnly: return "Use device passcode"
+        default: return "Biometric quick unlock"
+        }
+    }
+
+    private var biometricCardCaption: String {
+        if let authError { return authError }
+        if isAuthenticating { return "Scanning…" }
+        switch biometrics.availability {
+        case .unavailable: return "Unavailable"
+        default: return "Tap to sign in"
+        }
+    }
+
+    private var biometricCardCaptionColor: Color {
+        if authError != nil { return .red }
+        return isUnavailable ? AppColors.textTertiary : AppColors.primary
+    }
+
+    private func triggerBiometricAuth() {
+        guard !isAuthenticating, !isUnavailable else { return }
+        isAuthenticating = true
+        authError = nil
+        Task {
+            let reason = "Sign in to GeoPulse to access your assigned geofences and inspections."
+            let result = await biometrics.authenticate(reason: reason)
+            isAuthenticating = false
+            switch result {
+            case .success:
+                appState.signIn()
+            case .cancelled:
+                break
+            case .failed(let message):
+                authError = message
+            }
         }
     }
 
@@ -197,12 +263,18 @@ struct LoginView: View {
                     .font(AppTypography.caption())
                     .foregroundStyle(AppColors.textSecondary)
                 HStack(spacing: 4) {
+                    if isAuthenticating {
+                        ProgressView().scaleEffect(0.6).tint(captionColor)
+                    }
                     Text(caption)
                         .font(AppTypography.captionBold())
                         .foregroundStyle(captionColor)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(captionColor)
+                        .lineLimit(2)
+                    if !isAuthenticating {
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(captionColor)
+                    }
                 }
             }
         }

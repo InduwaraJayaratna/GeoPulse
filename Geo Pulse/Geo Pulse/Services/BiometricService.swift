@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import Combine
 
 @MainActor
 final class BiometricService: ObservableObject {

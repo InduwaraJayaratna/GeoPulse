@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CertifiedReportView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         ScrollView {
@@ -11,7 +12,7 @@ struct CertifiedReportView: View {
                 measurementsCard
                 evidenceCard
                 verificationCard
-                PrimaryButton(title: "Share PDF Report", icon: "square.and.arrow.up") {}
+                shareButton
                 PrimaryButton(title: "Return to Home", tone: .outlined) {
                     dismiss()
                 }
@@ -23,6 +24,24 @@ struct CertifiedReportView: View {
         .background(AppColors.background.ignoresSafeArea())
         .navigationTitle("Certified Report")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder private var shareButton: some View {
+        if let latest = appState.inspectionHistory.first,
+           let url = PDFReportBuilder.build(for: latest, user: appState.currentUser) {
+            ShareLink(item: url) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up")
+                    Text("Share PDF Report")
+                        .font(AppTypography.bodyBold())
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .foregroundStyle(.white)
+                .background(AppColors.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
     }
 
     private var verifiedCard: some View {

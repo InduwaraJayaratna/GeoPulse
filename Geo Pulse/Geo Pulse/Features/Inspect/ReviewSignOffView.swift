@@ -2,20 +2,27 @@ import SwiftUI
 
 struct ReviewSignOffView: View {
     @Environment(\.dismiss) private var dismiss
-    let task: FieldTask
+    @EnvironmentObject private var appState: AppState
+    let draft: InspectionDraft
     @State private var certifies: Bool = true
     @State private var showCertifiedReport: Bool = false
+    @State private var submittedInspection: Inspection?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 reviewCard
+                hazardSummaryCard
+                voiceNoteCard
                 checkpointsCard
                 signOffCard
                 PrimaryButton(title: "Sign and Submit Inspection", icon: "signature") {
+                    let inspection = appState.completeInspection(from: draft, certifies: certifies)
+                    submittedInspection = inspection
                     showCertifiedReport = true
                 }
-                PrimaryButton(title: "Export Draft Report", icon: "square.and.arrow.down", tone: .outlined) {}
+                .disabled(!certifies)
+                draftExportButton
                 Spacer(minLength: 24)
             }
             .padding(.horizontal, 20)
@@ -34,9 +41,92 @@ struct ReviewSignOffView: View {
                 }
             }
         }
-        .sheet(isPresented: $showCertifiedReport) {
+        .sheet(isPresented: $showCertifiedReport, onDismiss: { dismiss() }) {
             NavigationStack {
                 CertifiedReportView()
+            }
+        }
+    }
+
+    @ViewBuilder private var draftExportButton: some View {
+        let preview = Inspection(
+            taskId: draft.task.id,
+            siteName: draft.task.siteName,
+            inspectorName: appState.currentUser.displayName,
+            completedAt: Date(),
+            durationMinutes: max(1, Int(Date().timeIntervalSince(draft.startedAt) / 60)),
+            resultSummary: draft.hazardTag.map { "DRAFT — flagged \($0)." } ?? "DRAFT — pending sign-off.",
+            passedCount: 6,
+            totalCount: 7,
+            statusTag: "Draft",
+            hazardTag: draft.hazardTag,
+            hazardConfidence: draft.hazardConfidence,
+            voiceNote: draft.voiceNote,
+            photoName: draft.photoName,
+            syncState: .savedLocally
+        )
+        if let url = PDFReportBuilder.build(for: preview, user: appState.currentUser) {
+            ShareLink(item: url) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("Export Draft Report")
+                        .font(AppTypography.bodyBold())
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .foregroundStyle(AppColors.textPrimary)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppColors.divider, lineWidth: 1)
+                )
+            }
+        }
+    }
+
+    private var hazardSummaryCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 10) {
+                LabelCaps(text: "Hazard Analysis")
+                if let hazard = draft.hazardTag {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(AppColors.accentWarning)
+                        Text("\(hazard) · \(Int((draft.hazardConfidence ?? 0) * 100))% confidence")
+                            .font(AppTypography.bodyBold())
+                            .foregroundStyle(AppColors.accentWarning)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppColors.accentWarningSoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundStyle(AppColors.accentSuccess)
+                        Text("No hazard detected by on-device Vision classifier")
+                            .font(AppTypography.bodyBold())
+                            .foregroundStyle(AppColors.accentSuccess)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppColors.accentSuccessSoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private var voiceNoteCard: some View {
+        CardContainer {
+            VStack(alignment: .leading, spacing: 10) {
+                LabelCaps(text: "Voice Note Transcript")
+                Text(draft.voiceNote?.isEmpty == false ? draft.voiceNote! : "No voice note recorded for this inspection.")
+                    .font(AppTypography.body())
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(AppColors.surfaceAlt)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
     }
@@ -49,11 +139,11 @@ struct ReviewSignOffView: View {
                     Spacer()
                     StatusBadge(text: "Pending Sign-Off", tone: .warning, showsDot: true)
                 }
-                Text("Riverside Plant · Sector 4")
+                Text(draft.task.siteName)
                     .font(AppTypography.title())
                 HStack(spacing: 12) {
-                    kpiTile(title: "Lead Inspector", value: "Alex Mercer, PE")
-                    kpiTile(title: "Result Summary", value: "6 of 7 Passed")
+                    kpiTile(title: "Lead Inspector", value: appState.currentUser.displayName)
+                    kpiTile(title: "Task", value: draft.task.title)
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "info.circle")
@@ -186,6 +276,7 @@ struct ReviewSignOffView: View {
 
 #Preview {
     NavigationStack {
-        ReviewSignOffView(task: SampleData.tasks[0])
+        ReviewSignOffView(draft: InspectionDraft(task: SampleData.tasks[0]))
     }
+    .environmentObject(AppState())
 }

@@ -41,6 +41,9 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>GeoPulse reads selected photos to attach them to inspection records.</string>
 
+	<key>NSFaceIDUsageDescription</key>
+	<string>GeoPulse uses Face ID to sign you into your shift securely without typing your password.</string>
+
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
