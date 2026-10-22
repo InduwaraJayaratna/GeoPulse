@@ -136,4 +136,4 @@ The MVP is feature-complete against the proposal's nine items. The remaining str
 
 ## License
 
-Coursework submission — University of Westminster · COBSCCOMP251P-017.
+Coursework submission — University of Coventry · COBSCCOMP251P-017.
