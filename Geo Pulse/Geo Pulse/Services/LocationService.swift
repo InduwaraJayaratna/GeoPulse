@@ -12,6 +12,8 @@ final class LocationService: NSObject, ObservableObject {
     @Published private(set) var enteredSiteIds: Set<UUID> = []
 
     private let manager = CLLocationManager()
+    private var wantsLocationUpdates = false
+    private var pendingSites: [Site] = []
 
     override init() {
         self.authorizationStatus = CLLocationManager().authorizationStatus
@@ -30,11 +32,13 @@ final class LocationService: NSObject, ObservableObject {
     }
 
     func startUpdating() {
+        wantsLocationUpdates = true
         guard authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse else { return }
         manager.startUpdatingLocation()
     }
 
     func stopUpdating() {
+        wantsLocationUpdates = false
         manager.stopUpdatingLocation()
     }
 
@@ -45,17 +49,12 @@ final class LocationService: NSObject, ObservableObject {
     }
 
     func monitorSites(_ sites: [Site]) {
+        pendingSites = sites
         guard authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse else { return }
 
-        stopAllMonitoring()
+        clearMonitoredRegions()
 
-        let origin = currentLocation
-        let nearest = sites.sorted { lhs, rhs in
-            guard let origin else { return false }
-            let a = CLLocation(latitude: lhs.latitude, longitude: lhs.longitude).distance(from: origin)
-            let b = CLLocation(latitude: rhs.latitude, longitude: rhs.longitude).distance(from: origin)
-            return a < b
-        }.prefix(Self.maxMonitoredRegions)
+        let nearest = GeofenceSelector.pickNearest(sites, to: currentLocation, limit: Self.maxMonitoredRegions)
 
         for site in nearest {
             let region = CLCircularRegion(
@@ -72,6 +71,11 @@ final class LocationService: NSObject, ObservableObject {
     }
 
     func stopAllMonitoring() {
+        pendingSites = []
+        clearMonitoredRegions()
+    }
+
+    private func clearMonitoredRegions() {
         for region in manager.monitoredRegions {
             manager.stopMonitoring(for: region)
         }
@@ -102,11 +106,14 @@ extension LocationService: CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         Task { @MainActor in
             self.authorizationStatus = status
+            guard self.wantsLocationUpdates || !self.pendingSites.isEmpty else { return }
             if status == .authorizedWhenInUse {
                 self.requestAlwaysAuthorization()
             }
             if status == .authorizedAlways || status == .authorizedWhenInUse {
                 self.startUpdating()
+                self.monitorSites(self.pendingSites)
+                if status == .authorizedAlways { self.enableBackgroundUpdates(true) }
             }
         }
     }
@@ -114,7 +121,10 @@ extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let latest = locations.last else { return }
         Task { @MainActor in
+            let firstFix = self.currentLocation == nil
+            guard self.wantsLocationUpdates else { return }
             self.currentLocation = latest
+            if firstFix { self.monitorSites(self.pendingSites) }
         }
     }
 

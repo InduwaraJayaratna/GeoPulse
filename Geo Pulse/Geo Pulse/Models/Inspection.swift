@@ -3,6 +3,7 @@ import Foundation
 struct Inspection: Identifiable, Hashable {
     let id: UUID
     var taskId: UUID
+    var siteId: UUID?
     var siteName: String
     var inspectorName: String
     var completedAt: Date
@@ -20,6 +21,7 @@ struct Inspection: Identifiable, Hashable {
     init(
         id: UUID = UUID(),
         taskId: UUID,
+        siteId: UUID? = nil,
         siteName: String,
         inspectorName: String,
         completedAt: Date = Date(),
@@ -36,6 +38,7 @@ struct Inspection: Identifiable, Hashable {
     ) {
         self.id = id
         self.taskId = taskId
+        self.siteId = siteId
         self.siteName = siteName
         self.inspectorName = inspectorName
         self.completedAt = completedAt

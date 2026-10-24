@@ -12,8 +12,12 @@ struct SettingsView: View {
                     profileCard
                     loneWorkerCard
                     notificationsCard
+                    if let message = appState.notificationService.errorMessage {
+                        Text(message).foregroundStyle(.red)
+                    }
                     syncCard
                     historyEntry
+                    Button("Sign out") { appState.signOut() }.frame(minHeight: 44)
                     footer
                     Spacer(minLength: 24)
                 }
@@ -67,15 +71,15 @@ struct SettingsView: View {
                         }
                     }
                     Spacer()
-                    Button {} label: {
-                        Text("Switch")
-                            .font(AppTypography.captionBold())
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .foregroundStyle(AppColors.primary)
-                            .background(.white)
-                            .clipShape(Capsule())
-                    }
+                    Menu("Switch site") {
+                        ForEach(appState.sites) { site in
+                            Button(site.name) {
+                                appState.selectedSiteId = site.id
+                                appState.currentUser.currentSiteName = site.name
+                            }
+                        }
+                    }.frame(minHeight: 44)
+
                 }
                 .padding(12)
                 .background(AppColors.surfaceAlt)
@@ -101,21 +105,21 @@ struct SettingsView: View {
                     Text("Lone-worker monitoring")
                         .font(AppTypography.titleSmall())
                     Spacer()
-                    Toggle("", isOn: $appState.isLoneWorkerMonitoringOn)
+                    Toggle("Lone-worker monitoring", isOn: $appState.isLoneWorkerMonitoringOn)
                         .labelsHidden()
                         .tint(AppColors.primary)
                 }
-                Text("Checks in every 45 minutes of inactivity and alerts dispatch if unacknowledged.")
+                Text("Detects possible falls while the app is active. Incidents are recorded locally; emergency dispatch is not connected.")
                     .font(AppTypography.caption())
                     .foregroundStyle(AppColors.textSecondary)
                 HStack {
                     HStack(spacing: 6) {
                         Circle().fill(AppColors.accentSuccess).frame(width: 8, height: 8)
-                        Text("Timer running")
+                        Text(appState.isLoneWorkerMonitoringOn ? "Monitoring enabled" : "Monitoring off")
                             .font(AppTypography.captionBold())
                     }
                     Spacer()
-                    Text("\(appState.loneWorkerTimerMinutesRemaining)m remaining")
+                    Text("Device motion")
                         .font(AppTypography.captionBold())
                         .foregroundStyle(AppColors.textSecondary)
                 }
@@ -178,7 +182,7 @@ struct SettingsView: View {
                     .foregroundStyle(AppColors.textSecondary)
             }
             Spacer()
-            Toggle("", isOn: isOn)
+            Toggle(title, isOn: isOn)
                 .labelsHidden()
                 .tint(AppColors.primary)
         }
@@ -195,7 +199,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Field Data Sync")
                         .font(AppTypography.bodyBold())
-                    Text("Last synced \(relativeTime(from: appState.lastSyncDate))")
+                    Text(appState.syncMessage)
                         .font(AppTypography.caption())
                         .foregroundStyle(AppColors.textSecondary)
                 }
@@ -203,7 +207,7 @@ struct SettingsView: View {
                 Button {
                     appState.syncNow()
                 } label: {
-                    Text("Sync now")
+                    Text("Check sync status")
                         .font(AppTypography.captionBold())
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
@@ -253,7 +257,7 @@ struct SettingsView: View {
         VStack(spacing: 4) {
             HStack(spacing: 6) {
                 Circle().fill(AppColors.accentSuccess).frame(width: 8, height: 8)
-                Text("Telemetry link verified · Offline cache active")
+                Text("Records stored on this device")
                     .font(AppTypography.caption())
                     .foregroundStyle(AppColors.textSecondary)
             }

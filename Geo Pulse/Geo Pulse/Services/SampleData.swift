@@ -1,10 +1,10 @@
 import Foundation
 
 enum SampleData {
-    static let riversideId = UUID()
-    static let apexId = UUID()
-    static let harborId = UUID()
-    static let southReservoirId = UUID()
+    static let riversideId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    static let apexId = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    static let harborId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    static let southReservoirId = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
 
     static let currentUser = UserProfile(
         displayName: "Alex Mercer",
@@ -25,7 +25,7 @@ enum SampleData {
 
     static let tasks: [FieldTask] = [
         FieldTask(
-            id: UUID(),
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
             title: "High Pressure Valve B-4 Leak Test",
             siteId: riversideId,
             siteName: "Compressor Station 3",
@@ -38,7 +38,7 @@ enum SampleData {
             scheduledAt: Date().addingTimeInterval(45 * 60)
         ),
         FieldTask(
-            id: UUID(),
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
             title: "Structural Foundation Inspection",
             siteId: riversideId,
             siteName: "Cooling Tower East",
@@ -48,7 +48,7 @@ enum SampleData {
             status: .notStarted
         ),
         FieldTask(
-            id: UUID(),
+            id: UUID(uuidString: "10000000-0000-0000-0000-000000000003")!,
             title: "Emergency Generator Fuel Audit",
             siteId: riversideId,
             siteName: "Backup Substation",
@@ -71,7 +71,7 @@ enum SampleData {
             status: .operational,
             weather: riversideWeather,
             tasks: tasks,
-            isInsideGeofence: true
+            isInsideGeofence: false
         ),
         Site(
             id: apexId,

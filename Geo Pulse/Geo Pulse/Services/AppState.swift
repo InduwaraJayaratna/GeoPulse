@@ -20,10 +20,18 @@ final class AppState: ObservableObject {
     @Published var activityFeed: [ActivityEvent] = []
     @Published var syncStatus: SyncConnectionStatus = .connecting
 
-    let locationService = LocationService()
-    let notificationService = NotificationService()
-    let motionService = MotionService()
-    let syncRepository: SyncRepository = MockSyncRepository()
+    lazy var locationService = LocationService()
+    lazy var notificationService = providedNotifications ?? NotificationService()
+    private let providedNotifications: NotificationService?
+    lazy var motionService = MotionService()
+    let syncRepository: any SyncRepository
+    private let store: any InspectionStore
+    private let now: () -> Date
+    @Published var errorMessage: String?
+    @Published var selectedTask: FieldTask?
+    @Published var selectedSiteId: UUID?
+    @Published var syncMessage = "Records are saved on this device. Remote sync is not configured."
+
 
     private var cancellables: Set<AnyCancellable> = []
     private var entryObserver: NSObjectProtocol?
@@ -32,9 +40,19 @@ final class AppState: ObservableObject {
     private var feedTask: Task<Void, Never>?
     private var statusTask: Task<Void, Never>?
 
-    init() {
+    init(store: (any InspectionStore)? = nil,
+         syncRepository: (any SyncRepository)? = nil,
+         sites: [Site]? = nil,
+         notificationService: NotificationService? = nil,
+         now: @escaping () -> Date = Date.init,
+         observeEvents: Bool = true) {
+        let shouldSeedDemoHistory = (store == nil)
+        self.providedNotifications = notificationService
+        self.store = store ?? CoreDataStack.shared
+        self.syncRepository = syncRepository ?? MockSyncRepository()
+        self.now = now
         self.currentUser = SampleData.currentUser
-        self.sites = SampleData.sites
+        self.sites = sites ?? SampleData.sites
         self.isAuthenticated = false
         self.isLoneWorkerMonitoringOn = true
         self.geofenceAlertsOn = true
@@ -42,15 +60,24 @@ final class AppState: ObservableObject {
         self.lastSyncDate = Date().addingTimeInterval(-240)
         self.loneWorkerTimerMinutesRemaining = 38
 
-        // Load persisted inspections from Core Data, then overlay seed records
-        // only if there's nothing stored yet (so a fresh install still shows
-        // examples but subsequent launches reflect real work).
-        let persisted = CoreDataStack.shared.fetchAllInspections()
-        self.inspectionHistory = persisted.isEmpty ? SampleData.historyInspections : persisted
-
-        observeGeofenceEvents()
-        observeFallEvents()
-        startSyncFeed()
+        self.inspectionHistory = []
+        do {
+            var loaded = try self.store.fetchAllInspections()
+            if loaded.isEmpty && shouldSeedDemoHistory {
+                for sample in SampleData.historyInspections {
+                    try? self.store.saveInspection(sample)
+                }
+                loaded = (try? self.store.fetchAllInspections()) ?? SampleData.historyInspections
+            }
+            self.inspectionHistory = loaded
+        }
+        catch { self.errorMessage = "Could not load inspections: \(error.localizedDescription)" }
+        for inspection in inspectionHistory.reversed() { updateTask(for: inspection) }
+        if observeEvents {
+            observeGeofenceEvents()
+            observeFallEvents()
+            startSyncFeed()
+        }
     }
 
     deinit {
@@ -62,11 +89,11 @@ final class AppState: ObservableObject {
     }
 
     var activeSite: Site? {
-        sites.first(where: { $0.isInsideGeofence })
+        sites.first(where: { $0.isInsideGeofence }) ?? sites.first(where: { $0.id == selectedSiteId })
     }
 
     var todayTasks: [FieldTask] {
-        activeSite?.tasks ?? []
+        activeSite?.tasks ?? sites.flatMap(\.tasks)
     }
 
     func signIn() {
@@ -76,13 +103,14 @@ final class AppState: ObservableObject {
 
     func signOut() {
         isAuthenticated = false
+        showFallAlert = false
         locationService.stopAllMonitoring()
         locationService.stopUpdating()
         motionService.stopMonitoring()
     }
 
     func syncNow() {
-        lastSyncDate = Date()
+        syncMessage = "Remote sync is not configured. Your records remain saved locally."
     }
 
     func simulateFall() {
@@ -95,58 +123,60 @@ final class AppState: ObservableObject {
     }
 
     func escalateFallAlert() {
+        guard showFallAlert else { return }
         showFallAlert = false
         motionService.acknowledgeFall()
-        notificationService.scheduleFallDetectionAlert()
-        let incident = SampleData.safetyIncident(for: activeSite?.name ?? currentUser.currentSiteName)
-        inspectionHistory.insert(incident, at: 0)
-        activityFeed.insert(
-            ActivityEvent(
-                kind: .fallAlert,
-                actorName: currentUser.displayName,
-                siteName: incident.siteName,
-                summary: "Possible fall — alert escalated to Markus Vance"
-            ),
-            at: 0
-        )
-        Task { await syncRepository.publish(inspection: incident) }
+        let incident = Inspection(taskId: UUID(), siteId: activeSite?.id,
+            siteName: activeSite?.name ?? currentUser.currentSiteName,
+            inspectorName: currentUser.displayName, completedAt: now(),
+            resultSummary: "Possible fall recorded locally. Contact emergency services if needed.",
+            statusTag: "Safety incident")
+        do {
+            try recordInspectionCompleted(incident)
+            notificationService.scheduleFallDetectionAlert()
+        } catch { errorMessage = "Could not save safety incident: \(error.localizedDescription)" }
     }
 
-    func recordInspectionCompleted(_ inspection: Inspection) {
-        CoreDataStack.shared.saveInspection(inspection)
+    func recordInspectionCompleted(_ inspection: Inspection) throws {
+        try store.saveInspection(inspection)
+        inspectionHistory.removeAll { $0.id == inspection.id }
         inspectionHistory.insert(inspection, at: 0)
+        updateTask(for: inspection)
         Task { await syncRepository.publish(inspection: inspection) }
     }
 
-    func completeInspection(from draft: InspectionDraft, certifies: Bool) -> Inspection {
-        let now = Date()
-        let duration = max(1, Int(now.timeIntervalSince(draft.startedAt) / 60))
-        let statusTag = (draft.hazardTag != nil) ? "Conditional" : "Verified"
-        let resultSummary = draft.hazardTag.map { "Flagged \($0) during \(draft.task.title)." }
-            ?? "All checkpoints nominal for \(draft.task.title)."
+    private func updateTask(for inspection: Inspection) {
+        for siteIndex in sites.indices {
+            if let taskIndex = sites[siteIndex].tasks.firstIndex(where: { $0.id == inspection.taskId }) {
+                sites[siteIndex].tasks[taskIndex].status = inspection.statusTag == "Remediation" ? .flagged : .completed
+            }
+        }
+    }
 
+    func completeInspection(from draft: InspectionDraft, certifies: Bool) throws -> Inspection {
+        guard certifies else { throw InspectionValidationError.certificationRequired }
+        guard draft.isComplete else { throw InspectionValidationError.incompleteCheckpoints }
+        // Reusing a draft cannot create a second record, even after a retry.
+        if let existing = inspectionHistory.first(where: { $0.id == draft.id }) { return existing }
+        let date = now()
+        let flagged = draft.hazardTag != nil || draft.hasFlaggedCheckpoint
         let inspection = Inspection(
-            taskId: draft.task.id,
-            siteName: draft.task.siteName,
-            inspectorName: currentUser.displayName,
-            completedAt: now,
-            durationMinutes: duration,
-            resultSummary: resultSummary,
-            passedCount: certifies ? 7 : 6,
-            totalCount: 7,
-            statusTag: statusTag,
-            hazardTag: draft.hazardTag,
-            hazardConfidence: draft.hazardConfidence,
-            voiceNote: draft.voiceNote,
-            photoName: draft.photoName,
-            syncState: .savedLocally
-        )
-        recordInspectionCompleted(inspection)
+            id: draft.id, taskId: draft.task.id, siteId: draft.task.siteId,
+            siteName: sites.first(where: { $0.id == draft.task.siteId })?.name ?? draft.task.siteName,
+            inspectorName: currentUser.displayName, completedAt: date,
+            durationMinutes: max(1, Int(date.timeIntervalSince(draft.startedAt) / 60)),
+            resultSummary: flagged ? "Inspection completed with findings requiring review." : "Recorded checkpoints passed.",
+            passedCount: draft.passedCount, totalCount: draft.checkpoints.count,
+            statusTag: flagged ? "Conditional" : "Verified",
+            hazardTag: draft.hazardTag, hazardConfidence: draft.hazardConfidence,
+            voiceNote: draft.voiceNote, photoName: draft.photoName, syncState: .savedLocally)
+        try recordInspectionCompleted(inspection)
         return inspection
     }
 
     func bootstrapSensors() async {
         await notificationService.requestAuthorization()
+        guard isAuthenticated else { return }
 
         switch locationService.authorizationStatus {
         case .notDetermined:
@@ -191,7 +221,7 @@ final class AppState: ObservableObject {
            let index = sites.firstIndex(where: { $0.id == siteId }) {
             sites[index].weather = snapshot
             if let warning = snapshot.severeWarning, severeWeatherAlertsOn {
-                notificationService.scheduleGeofenceEntry(for: "\(site.name) · \(warning)", pendingTasks: site.tasks.count)
+                notificationService.scheduleGeofenceEntry(for: "\(site.name) · \(warning)", pendingTasks: site.tasks.filter { $0.status != .completed }.count)
             }
         }
     }
@@ -207,28 +237,13 @@ final class AppState: ObservableObject {
     }
 
     private func startSyncFeed() {
+        let feed = syncRepository.activityFeed()
+        syncStatus = syncRepository.connectionStatus
         feedTask = Task { [weak self] in
-            guard let self else { return }
-            for await event in self.syncRepository.activityFeed() {
-                await MainActor.run {
-                    self.activityFeed.insert(event, at: 0)
-                    if self.activityFeed.count > 40 {
-                        self.activityFeed.removeLast(self.activityFeed.count - 40)
-                    }
-                }
-            }
-        }
-
-        statusTask = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                await MainActor.run {
-                    self.syncStatus = self.syncRepository.connectionStatus
-                    if self.syncStatus == .live {
-                        self.lastSyncDate = Date()
-                    }
-                }
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            for await event in feed {
+                guard let self else { return }
+                self.activityFeed.insert(event, at: 0)
+                if self.activityFeed.count > 40 { self.activityFeed.removeLast() }
             }
         }
     }
@@ -240,7 +255,7 @@ final class AppState: ObservableObject {
             queue: .main
         ) { [weak self] note in
             guard let siteId = note.userInfo?["siteId"] as? UUID else { return }
-            Task { @MainActor in self?.handleEntry(siteId: siteId) }
+            Task { @MainActor [weak self] in self?.handleEntry(siteId: siteId) }
         }
 
         exitObserver = NotificationCenter.default.addObserver(
@@ -249,7 +264,7 @@ final class AppState: ObservableObject {
             queue: .main
         ) { [weak self] note in
             guard let siteId = note.userInfo?["siteId"] as? UUID else { return }
-            Task { @MainActor in self?.handleExit(siteId: siteId) }
+            Task { @MainActor [weak self] in self?.handleExit(siteId: siteId) }
         }
     }
 
@@ -259,9 +274,9 @@ final class AppState: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard self.isLoneWorkerMonitoringOn else { return }
+                guard self.isAuthenticated, self.isLoneWorkerMonitoringOn else { return }
                 self.showFallAlert = true
             }
         }
@@ -275,7 +290,7 @@ final class AppState: ObservableObject {
         currentUser.currentSiteName = site.name
 
         if geofenceAlertsOn {
-            notificationService.scheduleGeofenceEntry(for: site.name, pendingTasks: site.tasks.count)
+            notificationService.scheduleGeofenceEntry(for: site.name, pendingTasks: site.tasks.filter { $0.status != .completed }.count)
         }
 
         Task { await refreshWeather(for: siteId) }

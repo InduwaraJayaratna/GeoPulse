@@ -4,328 +4,136 @@ import PhotosUI
 struct InspectView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var speech = SpeechService()
-
-    @State private var selectedTask: FieldTask
+    var task: FieldTask? = nil
+    @State private var notes = ""
+    @State private var checkpoints: [Checkpoint] = []
     @State private var photoItem: PhotosPickerItem?
     @State private var capturedImage: UIImage?
-    @State private var isAnalyzing: Bool = false
+    @State private var photoName: String?
     @State private var hazardResult: HazardClassificationResult?
-    @State private var transcript: String = "\"Pressure reading is 142 PSI. Slight oxidation on flange bolts.\""
-    @State private var recordingSeconds: Int = 8
+    @State private var isAnalyzing = false
+    @State private var showCamera = false
     @State private var pendingDraft: InspectionDraft?
-    @State private var inspectionStartedAt: Date = Date()
-    @State private var showSourceChooser: Bool = false
-    @State private var showCamera: Bool = false
-    @State private var showLibrary: Bool = false
-
-    init() {
-        _selectedTask = State(initialValue: SampleData.tasks[0])
-    }
-
-    private var currentDraft: InspectionDraft {
-        let liveTranscript = speech.transcript.isEmpty ? nil : speech.transcript
-        let fallbackNote = liveTranscript ?? transcript.trimmingCharacters(in: .init(charactersIn: "\""))
-        let hazardLabel = hazardResult.map { $0.label == "No hazard detected" ? nil : $0.label } ?? "Surface corrosion"
-        let hazardConfidence = hazardResult?.confidence ?? 0.94
-        return InspectionDraft(
-            task: selectedTask,
-            hazardTag: hazardLabel,
-            hazardConfidence: hazardLabel == nil ? nil : hazardConfidence,
-            voiceNote: fallbackNote.isEmpty ? nil : fallbackNote,
-            photoName: capturedImage == nil ? nil : "capture-\(selectedTask.id.uuidString.prefix(6)).jpg",
-            startedAt: inspectionStartedAt
-        )
-    }
+    @State private var errorMessage: String?
+    @State private var startedAt = Date()
+    @State private var draftID = UUID()
+    private var selectedTask: FieldTask? { task ?? appState.selectedTask ?? appState.todayTasks.first { $0.status != .completed } }
 
     var body: some View {
-        VStack(spacing: 0) {
-            AppTopBar(title: "Inspect")
-            ScrollView {
-                VStack(spacing: 16) {
-                    protocolCard
-                    voiceCard
-                    visualCaptureCard
-                    PrimaryButton(title: "Complete Inspection & Review", icon: "checkmark.circle") {
-                        pendingDraft = currentDraft
-                    }
-                    Spacer(minLength: 24)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-            }
-        }
-        .background(AppColors.background.ignoresSafeArea())
-        .sheet(item: $pendingDraft) { draft in
-            NavigationStack {
-                ReviewSignOffView(draft: draft)
-            }
-        }
-        .task { await speech.requestAuthorization() }
-    }
-
-    private var protocolCard: some View {
-        CardContainer {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    HStack(spacing: 6) {
-                        Circle().fill(AppColors.accentSuccess).frame(width: 6, height: 6)
-                        Text("Protocol \(selectedTask.protocolCode)")
-                            .font(AppTypography.captionBold())
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(AppColors.accentSuccessSoft)
-                    .clipShape(Capsule())
-                    .foregroundStyle(AppColors.accentSuccess)
-                    Spacer()
-                    Text("Task #\(selectedTask.ticketNumber)")
-                        .font(AppTypography.captionBold())
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-                Text(selectedTask.title)
-                    .font(AppTypography.title())
-                    .foregroundStyle(AppColors.textPrimary)
-                HStack(spacing: 4) {
-                    Image(systemName: "mappin")
-                        .font(.caption)
-                        .foregroundStyle(AppColors.textSecondary)
-                    Text("Riverside Plant · \(selectedTask.siteName)")
-                        .font(AppTypography.caption())
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-            }
-        }
-    }
-
-    private var voiceCard: some View {
-        CardContainer {
-            VStack(spacing: 16) {
-                HStack {
-                    Text("Voice Observation")
-                        .font(AppTypography.titleSmall())
-                    Spacer()
-                    Text("Tap & Hold to Talk")
-                        .font(AppTypography.caption())
-                        .foregroundStyle(AppColors.textTertiary)
-                }
-
-                VStack(spacing: 12) {
-                    Button {} label: {
-                        ZStack {
-                            Circle().fill(AppColors.primary).frame(width: 72, height: 72)
-                            Image(systemName: speech.isRecording ? "waveform" : "mic.fill")
-                                .font(.system(size: 28, weight: .semibold))
-                                .foregroundStyle(.white)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let selectedTask {
+                    Text(selectedTask.title).font(.title2.bold())
+                    Text("Task #\(selectedTask.ticketNumber) · \(selectedTask.subLocation)").font(.subheadline)
+                    Text("Record each checkpoint outcome. Only observed evidence will be saved.")
+                        .foregroundStyle(.secondary)
+                    ForEach($checkpoints) { $checkpoint in
+                        VStack(alignment: .leading) {
+                            Text(checkpoint.title).font(.headline)
+                            Picker("Outcome for \(checkpoint.title)", selection: $checkpoint.status) {
+                                Text("Not checked").tag(CheckpointStatus.pending)
+                                Text("Passed").tag(CheckpointStatus.passed)
+                                Text("Needs attention").tag(CheckpointStatus.flagged("Needs attention"))
+                            }.pickerStyle(.menu)
                         }
                     }
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.1)
-                            .onEnded { _ in speech.startRecording() }
-                    )
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onEnded { _ in speech.stopRecording() }
-                    )
-
-                    waveformView
-
-                    Text("Hold to record inspection notes")
-                        .font(AppTypography.caption())
-                        .foregroundStyle(AppColors.textSecondary)
-                }
-
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "waveform")
-                        .foregroundStyle(AppColors.primary)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Transcription")
-                                .font(AppTypography.captionBold())
-                            Spacer()
-                            Text(String(format: "00:%02d", recordingSeconds))
-                                .font(AppTypography.caption())
-                                .foregroundStyle(AppColors.textTertiary)
-                        }
-                        Text(speech.transcript.isEmpty ? transcript : "\"\(speech.transcript)\"")
-                            .font(AppTypography.body())
-                            .foregroundStyle(AppColors.textPrimary)
+                    Divider()
+                    Text("Inspection notes").font(.headline)
+                    TextEditor(text: $notes).frame(minHeight: 120)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.secondary))
+                        .accessibilityLabel("Inspection notes")
+                    Button(speech.isRecording ? "Stop recording" : "Record voice note",
+                           systemImage: speech.isRecording ? "stop.circle" : "mic") {
+                        if speech.isRecording { speech.stopRecording() }
+                        else { Task { await speech.requestAuthorization(); speech.startRecording() } }
+                    }.frame(minHeight: 44)
+                    if !speech.transcript.isEmpty {
+                        Text(speech.transcript)
+                        Button("Append transcript to notes") {
+                            notes += (notes.isEmpty ? "" : "\n") + speech.transcript
+                            speech.transcript = ""
+                        }.frame(minHeight: 44)
                     }
-                }
-                .padding(12)
-                .background(AppColors.surfaceAlt)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-        }
-    }
-
-    private var waveformView: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<24, id: \.self) { i in
-                Capsule()
-                    .fill(AppColors.primary.opacity(waveformIntensity(for: i)))
-                    .frame(width: 4, height: waveformHeight(for: i))
-            }
-        }
-        .frame(height: 36)
-    }
-
-    private func waveformIntensity(for index: Int) -> Double {
-        let base = sin(Double(index) * 0.6) * 0.5 + 0.5
-        return 0.3 + base * 0.7
-    }
-
-    private func waveformHeight(for index: Int) -> CGFloat {
-        let base = abs(sin(Double(index) * 0.9))
-        return 10 + CGFloat(base) * 22
-    }
-
-    private var visualCaptureCard: some View {
-        CardContainer {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Visual Capture")
-                        .font(AppTypography.titleSmall())
-                    Spacer()
-                    Text("Verified Asset")
-                        .font(AppTypography.caption())
-                        .foregroundStyle(AppColors.textTertiary)
-                }
-
-                ZStack(alignment: .topTrailing) {
-                    photoPreview
-                    HStack(spacing: 4) {
-                        Circle().fill(AppColors.accentSuccess).frame(width: 6, height: 6)
-                        Text("Auto-Stabilized")
-                            .font(AppTypography.label())
+                    if let message = speech.errorMessage { Text(message).foregroundStyle(.red) }
+                    Text("You can type notes if speech is unavailable.").font(.caption)
+                    Divider()
+                    Text("Photo evidence (optional)").font(.headline)
+                    if let capturedImage {
+                        Image(uiImage: capturedImage).resizable().scaledToFit().frame(maxHeight: 240)
+                            .accessibilityLabel("Captured inspection photo")
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.white)
-                    .clipShape(Capsule())
-                    .foregroundStyle(AppColors.textPrimary)
-                    .padding(10)
-                }
-
-                if isAnalyzing {
-                    HStack(spacing: 8) {
-                        ProgressView().tint(AppColors.primary)
-                        Text("Analyzing…")
-                            .font(AppTypography.captionBold())
-                            .foregroundStyle(AppColors.primary)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity)
-                    .background(AppColors.primarySoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                } else if let result = hazardResult {
-                    HStack(spacing: 10) {
-                        Image(systemName: result.label == "No hazard detected" ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(result.label == "No hazard detected" ? AppColors.accentSuccess : AppColors.accentWarning)
-                        Text("\(result.label) · \(Int(result.confidence * 100))% confidence")
-                            .font(AppTypography.captionBold())
-                            .foregroundStyle(result.label == "No hazard detected" ? AppColors.accentSuccess : AppColors.accentWarning)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(result.label == "No hazard detected" ? AppColors.accentSuccessSoft : AppColors.accentWarningSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                } else {
-                    HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(AppColors.accentWarning)
-                        Text("Surface corrosion detected · 94% confidence")
-                            .font(AppTypography.captionBold())
-                            .foregroundStyle(AppColors.accentWarning)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(AppColors.accentWarningSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-
-                Button {
+                    PhotosPicker("Choose photo", selection: $photoItem, matching: .images)
+                        .disabled(isAnalyzing).frame(minHeight: 44)
                     if CameraPicker.isCameraAvailable {
-                        showSourceChooser = true
-                    } else {
-                        showLibrary = true
+                        Button("Take photo", systemImage: "camera") { showCamera = true }
+                            .disabled(isAnalyzing).frame(minHeight: 44)
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: capturedImage == nil ? "camera" : "camera.rotate")
-                        Text(capturedImage == nil ? "Capture Photo" : "Retake Photo")
-                            .font(AppTypography.bodyBold())
+                    if isAnalyzing { ProgressView("Saving and analysing photo…") }
+                    if let result = hazardResult {
+                        Text(result.label).font(.headline)
+                        if result.isHazard {
+                            Text("Image label confidence: \(Int(result.confidence * 100))%. Review this suggestion; it is not a safety assessment.")
+                        }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .foregroundStyle(AppColors.textPrimary)
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppColors.divider, lineWidth: 1))
-                }
-                .confirmationDialog("Capture inspection photo", isPresented: $showSourceChooser, titleVisibility: .visible) {
-                    Button("Take Photo") { showCamera = true }
-                    Button("Choose from Library") { showLibrary = true }
-                    Button("Cancel", role: .cancel) {}
-                }
-                .fullScreenCover(isPresented: $showCamera) {
-                    CameraPicker { image in
-                        Task { await handleCapturedImage(image) }
+                    Button("Complete Inspection & Review") {
+                        pendingDraft = InspectionDraft(id: draftID, task: selectedTask,
+                            hazardTag: hazardResult?.isHazard == true ? hazardResult?.label : nil,
+                            hazardConfidence: hazardResult?.isHazard == true ? hazardResult?.confidence : nil,
+                            voiceNote: notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : notes,
+                            photoName: photoName, checkpoints: checkpoints, startedAt: startedAt)
                     }
-                    .ignoresSafeArea()
+                    .buttonStyle(.borderedProminent).frame(minHeight: 44)
+                    .disabled(isAnalyzing || speech.isRecording || !allChecked)
+                    if !allChecked { Text("Choose an outcome for every checkpoint to continue.").font(.caption) }
+                } else {
+                    ContentUnavailableView("No pending task selected", systemImage: "checkmark.circle",
+                        description: Text("Choose a task from Home or the site task list."))
                 }
-                .photosPicker(isPresented: $showLibrary, selection: $photoItem, matching: .images)
-                .onChange(of: photoItem) { _, newItem in
-                    Task { await loadImage(newItem) }
-                }
+            }.padding(20)
+        }
+        .background(AppColors.background)
+        .onChange(of: selectedTask?.id, initial: true) { _, _ in resetDraft() }
+        .onDisappear { speech.stopRecording() }
+        .onChange(of: photoItem) { _, item in
+            Task {
+                do {
+                    guard let data = try await item?.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else { return }
+                    await capture(image)
+                } catch { errorMessage = "Could not read photo: \(error.localizedDescription)" }
             }
         }
-    }
-
-    private var photoPreview: some View {
-        Group {
-            if let capturedImage {
-                Image(uiImage: capturedImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                ZStack {
-                    LinearGradient(
-                        colors: [AppColors.surfaceAlt, Color(red: 0.78, green: 0.75, blue: 0.70)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    VStack(spacing: 8) {
-                        Image(systemName: "camera.aperture")
-                            .font(.system(size: 36))
-                            .foregroundStyle(AppColors.textTertiary)
-                        Text("No photo captured")
-                            .font(AppTypography.caption())
-                            .foregroundStyle(AppColors.textTertiary)
-                    }
-                }
-            }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image in Task { await capture(image) } }.ignoresSafeArea()
         }
-        .frame(height: 200)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .sheet(item: $pendingDraft) { draft in NavigationStack { ReviewSignOffView(draft: draft) } }
+        .alert("Photo unavailable", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("OK") { errorMessage = nil }
+        } message: { Text(errorMessage ?? "") }
     }
 
-    private func loadImage(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        if let data = try? await item.loadTransferable(type: Data.self),
-           let image = UIImage(data: data) {
-            await handleCapturedImage(image)
+    private var allChecked: Bool {
+        !checkpoints.isEmpty && checkpoints.allSatisfy {
+            switch $0.status { case .passed, .flagged, .remediated: return true; default: return false }
         }
     }
 
-    private func handleCapturedImage(_ image: UIImage) async {
-        capturedImage = image
+    private func resetDraft() {
+        draftID = UUID(); startedAt = Date(); notes = ""; photoName = nil
+        capturedImage = nil; hazardResult = nil
+        checkpoints = ["Asset condition", "Leaks and visible damage", "Work area safety"].enumerated().map {
+            Checkpoint(index: $0.offset + 1, title: $0.element, status: .pending)
+        }
+    }
+
+    private func capture(_ image: UIImage) async {
         isAnalyzing = true
-        hazardResult = nil
-        let result = await HazardClassifier.shared.classify(image: image)
-        isAnalyzing = false
-        hazardResult = result
+        defer { isAnalyzing = false }
+        do {
+            guard let data = image.jpegData(compressionQuality: 0.85) else { throw CocoaError(.fileWriteUnknown) }
+            let name = try PhotoStore().save(data)
+            capturedImage = image; photoName = name
+            hazardResult = await HazardClassifier.shared.classify(image: image)
+        } catch { errorMessage = "Could not save photo: \(error.localizedDescription)" }
     }
-}
-
-#Preview {
-    InspectView().environmentObject(AppState())
 }

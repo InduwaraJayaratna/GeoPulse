@@ -14,15 +14,15 @@ final class MotionService: ObservableObject {
     @Published private(set) var possibleFallDetected: Bool = false
     @Published private(set) var latestMagnitude: Double = 0
 
-    nonisolated(unsafe) private let motionManager = CMMotionManager()
-    nonisolated(unsafe) private let queue: OperationQueue = {
+    private let motionManager = CMMotionManager()
+    private let queue: OperationQueue = {
         let q = OperationQueue()
         q.name = "GeoPulse.MotionService"
         q.qualityOfService = .userInitiated
         return q
     }()
 
-    nonisolated(unsafe) private var highImpactAt: Date?
+    private let detector = FallDetector()
 
     func startMonitoring() {
         guard motionManager.isDeviceMotionAvailable else { return }
@@ -31,7 +31,15 @@ final class MotionService: ObservableObject {
         motionManager.deviceMotionUpdateInterval = 1.0 / 25.0
         motionManager.startDeviceMotionUpdates(to: queue) { [weak self] motion, _ in
             guard let self, let motion else { return }
-            self.evaluate(motion: motion)
+            let magnitude = sqrt(pow(motion.userAcceleration.x, 2) + pow(motion.userAcceleration.y, 2) + pow(motion.userAcceleration.z, 2))
+            let rotation = abs(motion.rotationRate.x) + abs(motion.rotationRate.y) + abs(motion.rotationRate.z)
+            Task { @MainActor [weak self] in
+                guard let self, self.isMonitoring else { return }
+                self.latestMagnitude = magnitude
+                if !self.possibleFallDetected && self.detector.ingest(sample: .init(accelerationMagnitude: magnitude, rotationMagnitude: rotation, timestamp: Date())) {
+                    self.simulateFall()
+                }
+            }
         }
     }
 
@@ -39,7 +47,7 @@ final class MotionService: ObservableObject {
         motionManager.stopDeviceMotionUpdates()
         isMonitoring = false
         possibleFallDetected = false
-        highImpactAt = nil
+        detector.reset()
     }
 
     func acknowledgeFall() {
@@ -52,31 +60,6 @@ final class MotionService: ObservableObject {
         NotificationCenter.default.post(name: .possibleFallDetected, object: nil)
     }
 
-    nonisolated private func evaluate(motion: CMDeviceMotion) {
-        let magnitude = sqrt(
-            pow(motion.userAcceleration.x, 2) +
-            pow(motion.userAcceleration.y, 2) +
-            pow(motion.userAcceleration.z, 2)
-        )
-
-        if magnitude > 3.0 {
-            highImpactAt = Date()
-        }
-
-        if let impactTime = highImpactAt {
-            let interval = Date().timeIntervalSince(impactTime)
-            let rotationMagnitude = abs(motion.rotationRate.x) + abs(motion.rotationRate.y) + abs(motion.rotationRate.z)
-            if interval > 1.0, interval < 3.0, rotationMagnitude < 0.2 {
-                highImpactAt = nil
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.latestMagnitude = magnitude
-                    self.possibleFallDetected = true
-                    NotificationCenter.default.post(name: .possibleFallDetected, object: nil)
-                }
-            }
-        }
-    }
 }
 
 extension Notification.Name {

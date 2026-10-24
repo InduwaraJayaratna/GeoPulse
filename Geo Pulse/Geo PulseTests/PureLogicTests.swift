@@ -15,6 +15,7 @@ import CoreLocation
 
 // MARK: - GeofenceSelector
 
+@MainActor
 @Suite("GeofenceSelector")
 struct GeofenceSelectorTests {
 
@@ -75,6 +76,7 @@ struct GeofenceSelectorTests {
 
 // MARK: - FallDetector
 
+@MainActor
 @Suite("FallDetector")
 struct FallDetectorTests {
 
@@ -178,6 +180,7 @@ struct FallDetectorTests {
 
 // MARK: - HazardMapper
 
+@MainActor
 @Suite("HazardMapper")
 struct HazardMapperTests {
 
@@ -224,27 +227,27 @@ struct HazardMapperTests {
         #expect(result.confidence == HazardMapper.fallbackConfidence)
     }
 
-    @Test("Returns fallback when observations are empty")
+    @Test("Empty observations report unavailable analysis")
     func emptyObservations() {
         let result = HazardMapper.classify(observations: [])
-        #expect(result.label == HazardMapper.fallbackLabel)
+        #expect(result.label == HazardMapper.unavailableLabel)
         #expect(result.rawTopIdentifier == nil)
     }
 
-    @Test("Clamps confidence below 0.65 up to the floor")
+    @Test("Preserves low classifier confidence")
     func clampsLowConfidence() {
         let result = HazardMapper.classify(observations: [
             .init(identifier: "rust", confidence: 0.1)
         ])
-        #expect(result.confidence == HazardMapper.confidenceFloor)
+        #expect(result.confidence == 0.1)
     }
 
-    @Test("Clamps confidence above 0.98 down to the ceiling")
+    @Test("Preserves high classifier confidence")
     func clampsHighConfidence() {
         let result = HazardMapper.classify(observations: [
             .init(identifier: "rust", confidence: 0.9999)
         ])
-        #expect(result.confidence == HazardMapper.confidenceCeiling)
+        #expect(result.confidence == 0.9999)
     }
 
     @Test("Preserves the raw top identifier when a match is found")
@@ -254,5 +257,33 @@ struct HazardMapperTests {
         ])
         #expect(result.rawTopIdentifier == "steel_pipework")
         #expect(result.label == "Structural wear")
+    }
+}
+
+@MainActor
+@Suite("Detector boundaries")
+struct DetectorBoundaryTests {
+    @Test(arguments: [1.0, 3.0])
+    func includesWindowBoundary(seconds: Double) {
+        let detector = FallDetector()
+        let start = Date(timeIntervalSince1970: 100)
+        detector.ingest(sample: .init(accelerationMagnitude: 4, rotationMagnitude: 0, timestamp: start))
+        #expect(detector.ingest(sample: .init(accelerationMagnitude: 0, rotationMagnitude: 0, timestamp: start.addingTimeInterval(seconds))))
+        #expect(!detector.ingest(sample: .init(accelerationMagnitude: 0, rotationMagnitude: 0, timestamp: start.addingTimeInterval(seconds))))
+    }
+    @Test func exactImpactThresholdDoesNotArm() {
+        let detector = FallDetector()
+        detector.ingest(sample: .init(accelerationMagnitude: 3, rotationMagnitude: 0, timestamp: .now))
+        #expect(detector.lastImpactAt == nil)
+    }
+    @Test func resetCancelsPendingImpact() {
+        let detector = FallDetector()
+        let start = Date(timeIntervalSince1970: 100)
+        detector.ingest(sample: .init(accelerationMagnitude: 4, rotationMagnitude: 0, timestamp: start))
+        detector.reset()
+        #expect(!detector.ingest(sample: .init(accelerationMagnitude: 0, rotationMagnitude: 0, timestamp: start.addingTimeInterval(2))))
+    }
+    @Test func negativeLimitSelectsNothing() {
+        #expect(GeofenceSelector.pickNearest(SampleData.sites, to: nil, limit: -1).isEmpty)
     }
 }

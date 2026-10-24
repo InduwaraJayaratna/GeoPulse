@@ -9,7 +9,8 @@ struct HistoryView: View {
             VStack(spacing: 16) {
                 summaryCard
                 ForEach(appState.inspectionHistory) { inspection in
-                    inspectionCard(inspection)
+                    NavigationLink { CertifiedReportView(inspection: inspection) } label: { inspectionCard(inspection) }
+                        .buttonStyle(.plain)
                 }
                 Spacer(minLength: 24)
             }
@@ -24,7 +25,7 @@ struct HistoryView: View {
                 Button {
                     dismiss()
                 } label: {
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "chevron.left").accessibilityLabel("Back")
                         .foregroundStyle(AppColors.textPrimary)
                 }
             }
@@ -43,7 +44,7 @@ struct HistoryView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Inspection History")
                         .font(AppTypography.titleSmall())
-                    Text("\(appState.inspectionHistory.count) records · synced from Firestore")
+                    Text("\(appState.inspectionHistory.count) records · stored on this device")
                         .font(AppTypography.caption())
                         .foregroundStyle(AppColors.textSecondary)
                 }

@@ -1,179 +1,65 @@
 import Foundation
-import SwiftUI
 import UIKit
+import CoreText
 
-/// Renders an `Inspection` to a one-page PDF using SwiftUI's `ImageRenderer`.
-///
-/// Produces a letter-size document written to the temporary directory, suitable
-/// for passing to `ShareLink`. No network call, no external SDK — just native
-/// drawing + Core Graphics PDF context.
+/// Paginated text report. Core Text reports how much fits on each page, so long
+/// observations continue onto following pages instead of being silently clipped.
 @MainActor
 enum PDFReportBuilder {
-
     static func build(for inspection: Inspection, user: UserProfile) -> URL? {
-        let page = PDFReportPage(inspection: inspection, user: user)
-            .frame(width: 612, height: 792) // US Letter at 72dpi
-        let renderer = ImageRenderer(content: page)
-        renderer.proposedSize = ProposedViewSize(width: 612, height: 792)
-
-        let filename = "GeoPulse-Inspection-\(inspection.id.uuidString.prefix(8)).pdf"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-
-        var success = false
-        renderer.render { size, drawInRect in
-            var box = CGRect(origin: .zero, size: size)
-            guard let context = CGContext(url as CFURL, mediaBox: &box, nil) else { return }
-            context.beginPDFPage(nil)
-            drawInRect(context)
-            context.endPDFPage()
-            context.closePDF()
-            success = true
-        }
-        return success ? url : nil
-    }
-}
-
-/// Printable summary of a completed inspection. Deliberately mono-weighted and
-/// high-contrast so it reads as an archival/compliance document rather than an
-/// extension of the app chrome.
-private struct PDFReportPage: View {
-    let inspection: Inspection
-    let user: UserProfile
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            header
-            sectionDivider
-            metadataGrid
-            sectionDivider
-            summarySection
-            if let hazard = inspection.hazardTag {
-                hazardSection(label: hazard, confidence: inspection.hazardConfidence ?? 0)
-            }
-            if let note = inspection.voiceNote, !note.isEmpty {
-                voiceSection(note: note)
-            }
-            Spacer()
-            footer
-        }
-        .padding(40)
-        .frame(width: 612, height: 792, alignment: .topLeading)
-        .background(.white)
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("GeoPulse")
-                    .font(.system(size: 28, weight: .heavy))
-                    .foregroundStyle(Color(red: 0.11, green: 0.21, blue: 0.47))
-                Text("Field Inspection Report")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("Report ID")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                Text(inspection.id.uuidString.prefix(8).uppercased())
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GeoPulse-Inspection-\(inspection.id.uuidString).pdf")
+        var lines = ["GeoPulse — Field Inspection Report", "Report ID: \(inspection.id)",
+            "Site: \(inspection.siteName)", "Inspector: \(inspection.inspectorName)",
+            "Completed: \(inspection.completedAt.formatted())", "Duration: \(inspection.durationMinutes) minutes",
+            "Status: \(inspection.statusTag)",
+            "\(inspection.passedCount) of \(inspection.totalCount) checkpoints passed or remediated.",
+            "", "RESULT SUMMARY", inspection.resultSummary]
+        if let hazard = inspection.hazardTag {
+            lines += ["", "PHOTO ANALYSIS SUGGESTION", hazard]
+            if let confidence = inspection.hazardConfidence {
+                lines.append("Image label confidence: \(Int(confidence * 100))%. Requires inspector review.")
             }
         }
-    }
-
-    private var sectionDivider: some View {
-        Rectangle().fill(Color(white: 0.85)).frame(height: 1)
-    }
-
-    private var metadataGrid: some View {
-        HStack(alignment: .top, spacing: 16) {
-            kv("Site", inspection.siteName)
-            kv("Inspector", inspection.inspectorName)
-            kv("Completed", shortDate(inspection.completedAt))
-            kv("Duration", "\(inspection.durationMinutes) min")
-            kv("Status", inspection.statusTag)
-        }
-    }
-
-    private func kv(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased())
-                .font(.system(size: 8, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.black)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var summarySection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("RESULT SUMMARY")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-            Text("\(inspection.passedCount) of \(inspection.totalCount) checkpoints passed. \(inspection.resultSummary)")
-                .font(.system(size: 12))
-                .foregroundStyle(.black)
-        }
-    }
-
-    private func hazardSection(label: String, confidence: Double) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("HAZARD CLASSIFICATION — ON-DEVICE VISION")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-            HStack {
-                Text(label)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.orange)
-                Spacer()
-                Text("\(Int(confidence * 100))% confidence")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+        if let note = inspection.voiceNote { lines += ["", "INSPECTION NOTES", note] }
+        lines += ["", "Storage: \(inspection.syncState.displayText)", "Exported by: \(user.displayName)"]
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 4
+        let text = NSAttributedString(string: lines.joined(separator: "\n"), attributes: [
+            .font: UIFont.systemFont(ofSize: 12), .foregroundColor: UIColor.black,
+            .paragraphStyle: paragraph
+        ])
+        let framesetter = CTFramesetterCreateWithAttributedString(text)
+        let bounds = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let renderer = UIGraphicsPDFRenderer(bounds: bounds)
+        do {
+            try renderer.writePDF(to: url) { rendererContext in
+                var offset = 0
+                while offset < text.length {
+                    rendererContext.beginPage()
+                    let context = rendererContext.cgContext
+                    context.saveGState()
+                    context.textMatrix = .identity
+                    context.translateBy(x: 0, y: bounds.height)
+                    context.scaleBy(x: 1, y: -1)
+                    let path = CGPath(rect: bounds.insetBy(dx: 40, dy: 40), transform: nil)
+                    let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: offset, length: 0), path, nil)
+                    CTFrameDraw(frame, context)
+                    let range = CTFrameGetVisibleStringRange(frame)
+                    context.restoreGState()
+                    guard range.length > 0 else { break }
+                    offset += range.length
+                }
+                if let name = inspection.photoName, let photoURL = PhotoStore().url(for: name),
+                   let image = UIImage(contentsOfFile: photoURL.path), image.size.width > 0, image.size.height > 0 {
+                    rendererContext.beginPage()
+                    let available = bounds.insetBy(dx: 40, dy: 40)
+                    let scale = min(available.width / image.size.width, available.height / image.size.height)
+                    image.draw(in: CGRect(x: available.minX, y: available.minY,
+                        width: image.size.width * scale, height: image.size.height * scale))
+                }
             }
-            .padding(10)
-            .background(Color.orange.opacity(0.08))
-        }
-    }
-
-    private func voiceSection(note: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("VOICE TRANSCRIPT")
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
-            Text("\u{201C}\(note)\u{201D}")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.black)
-                .padding(10)
-                .background(Color(white: 0.95))
-        }
-    }
-
-    private var footer: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            sectionDivider
-            HStack {
-                Text("Generated by GeoPulse · Authorised: \(user.displayName)")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(shortDate(Date()))
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func shortDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+            return url
+        } catch { return nil }
     }
 }

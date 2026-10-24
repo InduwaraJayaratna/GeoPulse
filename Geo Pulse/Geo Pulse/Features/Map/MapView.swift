@@ -6,7 +6,8 @@ struct MapView: View {
     @Binding var selectedTab: AppTab
 
     @State private var cameraPosition: MapCameraPosition
-    @State private var selectedSite: Site?
+    @State private var selectedSiteId: UUID?
+    private var selectedSite: Site? { appState.sites.first { $0.id == selectedSiteId } }
     @State private var showDossier: Bool = false
     @State private var showOpenInspection: Bool = false
 
@@ -18,7 +19,7 @@ struct MapView: View {
             latitudinalMeters: 2500,
             longitudinalMeters: 2500
         )))
-        self._selectedSite = State(initialValue: riverside)
+        self._selectedSiteId = State(initialValue: riverside.id)
     }
 
     var body: some View {
@@ -68,7 +69,7 @@ struct MapView: View {
                 ForEach(appState.sites) { site in
                     Annotation(site.name, coordinate: site.coordinate) {
                         Button {
-                            selectedSite = site
+                            selectedSiteId = site.id
                         } label: {
                             VStack(spacing: 4) {
                                 ZStack {
@@ -104,7 +105,7 @@ struct MapView: View {
             HStack {
                 HStack(spacing: 6) {
                     Circle().fill(AppColors.accentSuccess).frame(width: 8, height: 8)
-                    Text("Live Field Sync")
+                    Text("Assigned Sites")
                         .font(AppTypography.captionBold())
                         .foregroundStyle(AppColors.textPrimary)
                 }
