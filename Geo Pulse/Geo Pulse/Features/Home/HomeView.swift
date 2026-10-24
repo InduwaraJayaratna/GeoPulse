@@ -18,7 +18,7 @@ struct HomeView: View {
                         Circle()
                             .fill(AppColors.surfaceAlt)
                             .frame(width: 36, height: 36)
-                        Image(systemName: "bell")
+                        Image(systemName: "bell").accessibilityLabel("Local activity")
                             .foregroundStyle(AppColors.textPrimary)
                     }
                 }
@@ -39,18 +39,25 @@ struct HomeView: View {
             }
         }
         .background(AppColors.background.ignoresSafeArea())
+        .sheet(isPresented: $showNotifications) {
+            NavigationStack {
+                List(appState.activityFeed) { event in
+                    VStack(alignment: .leading) { Text(event.siteName).font(.headline); Text(event.summary) }
+                }.navigationTitle("Local Activity")
+            }
+        }
     }
 
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Good morning, \(appState.currentUser.displayName.components(separatedBy: " ").first ?? "Alex")")
+            Text("Welcome, \(appState.currentUser.displayName.components(separatedBy: " ").first ?? "Alex")")
                 .font(AppTypography.largeTitle())
                 .foregroundStyle(AppColors.textPrimary)
             HStack(spacing: 6) {
                 Circle()
                     .fill(AppColors.accentSuccess)
                     .frame(width: 8, height: 8)
-                Text("On site at \(currentSite?.name ?? appState.currentUser.currentSiteName)")
+                Text("Selected site: \(currentSite?.name ?? "All sites")")
                     .font(AppTypography.caption())
                     .foregroundStyle(AppColors.textSecondary)
             }
@@ -142,7 +149,10 @@ struct HomeView: View {
                 urgentTaskCard(urgent)
             }
             ForEach(todayTasks.filter { $0.priority == .normal }) { task in
-                basicTaskRow(task)
+                Button {
+                    appState.selectedTask = task
+                    selectedTab = .inspect
+                } label: { basicTaskRow(task) }.buttonStyle(.plain)
             }
         }
     }
@@ -179,6 +189,7 @@ struct HomeView: View {
                     .foregroundStyle(AppColors.accentWarning)
                     Spacer()
                     Button {
+                        appState.selectedTask = task
                         selectedTab = .inspect
                     } label: {
                         HStack(spacing: 6) {
@@ -211,11 +222,11 @@ struct HomeView: View {
                     Text(task.title)
                         .font(AppTypography.bodyBold())
                         .foregroundStyle(AppColors.textPrimary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text("\(task.siteName) · \(task.dueDescription)")
                         .font(AppTypography.caption())
                         .foregroundStyle(AppColors.textSecondary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -267,7 +278,7 @@ struct HomeView: View {
     private var liveActivityFeed: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionHeader(title: "Live Team Activity")
+                SectionHeader(title: "Local Activity")
                 Spacer()
                 HStack(spacing: 4) {
                     Circle()
@@ -283,7 +294,7 @@ struct HomeView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "antenna.radiowaves.left.and.right")
                             .foregroundStyle(AppColors.textTertiary)
-                        Text("Waiting for team sync…")
+                        Text("No local activity yet.")
                             .font(AppTypography.caption())
                             .foregroundStyle(AppColors.textSecondary)
                     }

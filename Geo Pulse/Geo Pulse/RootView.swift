@@ -7,6 +7,7 @@ enum AppTab: Hashable {
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: AppTab = .home
 
     private var isWide: Bool { horizontalSizeClass == .regular }
@@ -30,7 +31,10 @@ struct RootView: View {
                 .zIndex(100)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: appState.showFallAlert)
+        .alert("Operation failed", isPresented: Binding(get: { appState.errorMessage != nil }, set: { if !$0 { appState.errorMessage = nil } })) {
+            Button("OK") { appState.errorMessage = nil }
+        } message: { Text(appState.errorMessage ?? "") }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: appState.showFallAlert)
     }
 
     private var mainTabs: some View {
@@ -77,6 +81,9 @@ struct RootView: View {
             .foregroundStyle(isSelected ? AppColors.primary : AppColors.textTertiary)
         }
         .buttonStyle(.plain)
+        .frame(minHeight: 44)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 

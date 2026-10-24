@@ -26,9 +26,10 @@ struct OpenInspectionView: View {
                 filterBar
                 ForEach(filteredTasks) { task in
                     taskCard(task)
+                    NavigationLink("Log remediation for \(task.title)") { ViewTaskView(task: task) }
+                        .frame(minHeight: 44)
                 }
-                PrimaryButton(title: "Log Unscheduled Finding", icon: "plus.circle", tone: .outlined) {}
-                Text("Sector sync active · Local offline cache intact")
+                Text("Inspections are saved on this device")
                     .font(AppTypography.caption())
                     .foregroundStyle(AppColors.textTertiary)
                 Spacer(minLength: 24)
@@ -44,7 +45,7 @@ struct OpenInspectionView: View {
                 Button {
                     dismiss()
                 } label: {
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "chevron.left").accessibilityLabel("Back")
                         .foregroundStyle(AppColors.textPrimary)
                 }
             }
@@ -57,7 +58,7 @@ struct OpenInspectionView: View {
                 HStack {
                     HStack(spacing: 6) {
                         Circle().fill(AppColors.accentSuccess).frame(width: 8, height: 8)
-                        Text("Inside geofence")
+                        Text(site.isInsideGeofence ? "Inside geofence" : "Outside geofence")
                             .font(AppTypography.captionBold())
                             .foregroundStyle(AppColors.accentSuccess)
                     }
@@ -151,7 +152,7 @@ struct OpenInspectionView: View {
                     .foregroundStyle(AppColors.textSecondary)
                 HStack {
                     if task.priority == .attention {
-                        NavigationLink(destination: ViewTaskView(task: task)) {
+                        NavigationLink(destination: InspectView(task: task)) {
                             HStack(spacing: 6) {
                                 Image(systemName: "play.fill")
                                 Text("Start Inspection")
@@ -174,7 +175,7 @@ struct OpenInspectionView: View {
                             .font(AppTypography.caption())
                             .foregroundStyle(AppColors.textTertiary)
                         Spacer()
-                        NavigationLink(destination: ViewTaskView(task: task)) {
+                        NavigationLink(destination: InspectView(task: task)) {
                             HStack(spacing: 4) {
                                 Text("Open")
                                 Image(systemName: "chevron.right")

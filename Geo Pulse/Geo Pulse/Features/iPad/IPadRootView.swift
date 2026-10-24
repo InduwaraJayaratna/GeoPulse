@@ -54,6 +54,10 @@ struct IPadRootView: View {
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
             }
+            Section {
+                NavigationLink("Settings") { SettingsView() }
+                NavigationLink("Inspection history") { HistoryView() }
+            }
             Section("Job Sites") {
                 ForEach(filteredSites) { site in
                     NavigationLink(value: site.id) {
@@ -103,7 +107,7 @@ struct IPadRootView: View {
             Text(site.address.isEmpty ? site.subtitle : site.address)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
             if !site.tasks.isEmpty {
                 Text("\(site.tasks.count) task\(site.tasks.count == 1 ? "" : "s")")
                     .font(.caption2)
@@ -130,7 +134,7 @@ struct IPadRootView: View {
                     Circle()
                         .fill(appState.syncStatus == .live ? AppColors.accentSuccess : AppColors.textTertiary)
                         .frame(width: 8, height: 8)
-                    Text("Team Sync · \(appState.syncStatus.displayText)")
+                    Text("Local Feed · \(appState.syncStatus.displayText)")
                         .font(.subheadline.weight(.semibold))
                 }
             }
@@ -238,6 +242,9 @@ private struct SiteDetailPane: View {
             }
             .padding(20)
         }
+        .onChange(of: site.id) { _, _ in
+            cameraPosition = .region(MKCoordinateRegion(center: site.coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500))
+        }
         .navigationTitle(site.name)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -310,7 +317,7 @@ private struct SiteDetailPane: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(site.tasks) { task in
-                        HStack {
+                        NavigationLink { InspectView(task: task) } label: { HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(task.title).font(.body.weight(.semibold))
                                 Text(task.subLocation).font(.caption).foregroundStyle(.secondary)
@@ -318,7 +325,7 @@ private struct SiteDetailPane: View {
                             Spacer()
                             StatusBadge(text: task.priority.displayText, tone: task.priority.tone)
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 4) }
                         if task.id != site.tasks.last?.id { Divider() }
                     }
                 }
@@ -330,7 +337,7 @@ private struct SiteDetailPane: View {
         CardContainer {
             VStack(alignment: .leading, spacing: 10) {
                 LabelCaps(text: "Inspection History")
-                let siteRecords = appState.inspectionHistory.filter { $0.siteName == site.name }
+                let siteRecords = appState.inspectionHistory.filter { $0.siteId == site.id || ($0.siteId == nil && $0.siteName == site.name) }
                 if siteRecords.isEmpty {
                     Text("No inspections logged for this site yet.")
                         .font(.caption)

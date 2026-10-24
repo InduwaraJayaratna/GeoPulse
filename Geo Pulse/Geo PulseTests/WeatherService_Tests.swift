@@ -21,10 +21,17 @@ private final class WeatherURLProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
         let latitude = components.queryItems?.first { $0.name == "lat" }?.value
+        if latitude == "5.0" {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
         let status = latitude == "1.0" ? 401 : 200
+        let degrees = Double(components.queryItems?.first { $0.name == "lon" }?.value ?? "45") ?? 45
+        let weather = latitude == "4.0" ? "[]" : latitude == "3.0"
+            ? "[{\"id\":800,\"main\":\"Clear\",\"description\":\"clear sky\"}]"
+            : "[{\"id\":211,\"main\":\"Thunderstorm\",\"description\":\"thunderstorm\"}]"
         let body = latitude == "2.0" ? "invalid JSON" : """
-        {"main":{"temp":72.6},"wind":{"speed":5.4,"deg":45},
-         "weather":[{"id":211,"main":"Thunderstorm","description":"thunderstorm"}]}
+        {"main":{"temp":72.6},"wind":{"speed":5.4,"deg":\(degrees)},"weather":\(weather)}
         """
         let response = HTTPURLResponse(url: request.url!, statusCode: status,
                                        httpVersion: nil, headerFields: nil)!
@@ -44,6 +51,7 @@ private func stubSession() -> URLSession {
 
 // MARK: - Suites
 
+@MainActor
 @Suite("WeatherService — key handling")
 struct WeatherServiceKeyTests {
 
@@ -75,6 +83,7 @@ struct WeatherServiceKeyTests {
     }
 }
 
+@MainActor
 @Suite("WeatherService — response parsing")
 struct WeatherServiceParseTests {
 
@@ -83,7 +92,7 @@ struct WeatherServiceParseTests {
         let session = stubSession()
         defer { session.invalidateAndCancel() }
         let service = WeatherService(session: session, apiKey: "test-key")
-        let snapshot = try await service.fetchCurrent(for: .init(latitude: 0, longitude: 0))
+        let snapshot = try await service.fetchCurrent(for: .init(latitude: 0, longitude: 45))
 
         #expect(snapshot.temperatureF == 73)
         #expect(snapshot.windMph == 5)
@@ -123,6 +132,7 @@ struct WeatherServiceParseTests {
     }
 }
 
+@MainActor
 @Suite("WeatherSnapshot — equality")
 struct WeatherSnapshotTests {
 
@@ -143,5 +153,33 @@ struct WeatherSnapshotTests {
         let stormy = WeatherSnapshot(temperatureF: 72, windMph: 5, windDirection: "NE",
                                      condition: "Clear", severeWarning: "Thunderstorm")
         #expect(calm != stormy)
+    }
+}
+
+
+@MainActor
+@Suite("Weather edge cases")
+struct WeatherEdgeTests {
+    @Test(arguments: [(-45.0, "NW"), (0.0, "N"), (22.5, "NE"), (90.0, "E"), (180.0, "S"), (337.5, "N"), (360.0, "N")])
+    func compassBoundaries(degrees: Double, expected: String) async throws {
+        let session = stubSession(); defer { session.invalidateAndCancel() }
+        let snapshot = try await WeatherService(session: session, apiKey: "test").fetchCurrent(for: .init(latitude: 3, longitude: degrees))
+        #expect(snapshot.windDirection == expected)
+        #expect(snapshot.severeWarning == nil)
+        #expect(snapshot.condition == "Clear")
+    }
+    @Test func emptyConditionsAreNotReportedAsClear() async throws {
+        let session = stubSession(); defer { session.invalidateAndCancel() }
+        let snapshot = try await WeatherService(session: session, apiKey: "test").fetchCurrent(for: .init(latitude: 4, longitude: 0))
+        #expect(snapshot.condition == "Unavailable")
+        #expect(snapshot.severeWarning == nil)
+    }
+    @Test func transportFailureIsPropagated() async {
+        let session = stubSession(); defer { session.invalidateAndCancel() }
+        do {
+            _ = try await WeatherService(session: session, apiKey: "test").fetchCurrent(for: .init(latitude: 5, longitude: 0))
+            Issue.record("Expected offline error")
+        } catch let error as URLError { #expect(error.code == .notConnectedToInternet) }
+        catch { Issue.record("Unexpected error: \(error)") }
     }
 }

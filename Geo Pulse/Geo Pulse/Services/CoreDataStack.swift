@@ -7,13 +7,14 @@ import CoreData
 /// project navigator. The store sits in Application Support and persists across
 /// launches. `AppState` is the only consumer — it loads existing records on
 /// init and writes new ones from `recordInspectionCompleted(_:)`.
-final class CoreDataStack {
+@MainActor
+final class CoreDataStack: InspectionStore {
     static let shared = CoreDataStack()
 
     private let container: NSPersistentContainer
     private let inspectionEntityName = "CDInspection"
 
-    private init() {
+    init(inMemory: Bool = false, storeURL: URL? = nil) {
         let model = NSManagedObjectModel()
         let inspection = NSEntityDescription()
         inspection.name = "CDInspection"
@@ -21,6 +22,7 @@ final class CoreDataStack {
         inspection.properties = [
             Self.attr("id", .UUIDAttributeType),
             Self.attr("taskId", .UUIDAttributeType),
+            Self.attr("siteId", .UUIDAttributeType, optional: true),
             Self.attr("siteName", .stringAttributeType),
             Self.attr("inspectorName", .stringAttributeType),
             Self.attr("completedAt", .dateAttributeType),
@@ -39,10 +41,12 @@ final class CoreDataStack {
 
         container = NSPersistentContainer(name: "GeoPulseStore", managedObjectModel: model)
         let description = NSPersistentStoreDescription()
-        description.type = NSSQLiteStoreType
-        let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        try? FileManager.default.createDirectory(at: supportDir, withIntermediateDirectories: true)
-        description.url = supportDir.appendingPathComponent("GeoPulseStore.sqlite")
+        description.type = inMemory ? NSInMemoryStoreType : NSSQLiteStoreType
+        if !inMemory {
+            let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            try? FileManager.default.createDirectory(at: supportDir, withIntermediateDirectories: true)
+            description.url = storeURL ?? supportDir.appendingPathComponent("GeoPulseStore.sqlite")
+        }
         container.persistentStoreDescriptions = [description]
         container.loadPersistentStores { _, error in
             if let error { print("Core Data load failed: \(error)") }
@@ -52,24 +56,30 @@ final class CoreDataStack {
 
     // MARK: - Inspection CRUD
 
-    func saveInspection(_ inspection: Inspection) {
+    func saveInspection(_ inspection: Inspection) throws {
+        guard let duration = Int32(exactly: inspection.durationMinutes), duration >= 0,
+              let passed = Int32(exactly: inspection.passedCount), passed >= 0,
+              let total = Int32(exactly: inspection.totalCount), total >= passed else {
+            throw CocoaError(.validationNumberTooLarge)
+        }
         let context = container.viewContext
         let request = NSFetchRequest<NSManagedObject>(entityName: inspectionEntityName)
         request.predicate = NSPredicate(format: "id == %@", inspection.id as CVarArg)
         request.fetchLimit = 1
 
-        let managed = (try? context.fetch(request).first)
+        let managed = (try context.fetch(request).first)
             ?? NSEntityDescription.insertNewObject(forEntityName: inspectionEntityName, into: context)
 
         managed.setValue(inspection.id, forKey: "id")
         managed.setValue(inspection.taskId, forKey: "taskId")
+        managed.setValue(inspection.siteId, forKey: "siteId")
         managed.setValue(inspection.siteName, forKey: "siteName")
         managed.setValue(inspection.inspectorName, forKey: "inspectorName")
         managed.setValue(inspection.completedAt, forKey: "completedAt")
-        managed.setValue(Int32(inspection.durationMinutes), forKey: "durationMinutes")
+        managed.setValue(duration, forKey: "durationMinutes")
         managed.setValue(inspection.resultSummary, forKey: "resultSummary")
-        managed.setValue(Int32(inspection.passedCount), forKey: "passedCount")
-        managed.setValue(Int32(inspection.totalCount), forKey: "totalCount")
+        managed.setValue(passed, forKey: "passedCount")
+        managed.setValue(total, forKey: "totalCount")
         managed.setValue(inspection.statusTag, forKey: "statusTag")
         managed.setValue(inspection.hazardTag, forKey: "hazardTag")
         managed.setValue(inspection.hazardConfidence, forKey: "hazardConfidence")
@@ -77,15 +87,16 @@ final class CoreDataStack {
         managed.setValue(inspection.photoName, forKey: "photoName")
         managed.setValue(Self.syncStateRaw(inspection.syncState), forKey: "syncStateRaw")
 
-        try? context.save()
+        do { try context.save() }
+        catch { context.rollback(); throw error }
     }
 
-    func fetchAllInspections() -> [Inspection] {
+    func fetchAllInspections() throws -> [Inspection] {
         let context = container.viewContext
         let request = NSFetchRequest<NSManagedObject>(entityName: inspectionEntityName)
         request.sortDescriptors = [NSSortDescriptor(key: "completedAt", ascending: false)]
-        guard let rows = try? context.fetch(request) else { return [] }
-        return rows.compactMap(Self.toInspection)
+        let rows = try context.fetch(request)
+        return rows.compactMap { Self.toInspection($0) }
     }
 
     // MARK: - Helpers
@@ -126,6 +137,7 @@ final class CoreDataStack {
         return Inspection(
             id: id,
             taskId: taskId,
+            siteId: row.value(forKey: "siteId") as? UUID,
             siteName: siteName,
             inspectorName: inspectorName,
             completedAt: completedAt,

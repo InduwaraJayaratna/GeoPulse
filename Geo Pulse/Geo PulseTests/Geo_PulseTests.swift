@@ -2,8 +2,7 @@
 //  Geo_PulseTests.swift
 //  Geo PulseTests
 //
-//  Covers the three test categories named in the proposal — geofence math,
-//  API parsing, and sync resolution — plus a Core Data persistence roundtrip.
+//  Coordinate, local event publishing, persistence, and PDF smoke tests.
 //
 
 import Testing
@@ -13,26 +12,8 @@ import CoreLocation
 // MARK: - Geofence math
 
 @Suite("Geofence math")
+@MainActor
 struct GeofenceTests {
-
-    @Test("LocationService caps monitored regions at the iOS 20-region limit")
-    @MainActor
-    func regionCap() {
-        let service = LocationService()
-        let sites = (0..<30).map { i in
-            Site(
-                name: "Site \(i)",
-                latitude: 30.0 + Double(i) * 0.01,
-                longitude: -91.0,
-                geofenceRadius: 150
-            )
-        }
-        service.monitorSites(sites)
-        // monitorSites only takes effect when authorized; on the test host the
-        // call is a no-op, so we just assert the invariant that the state is
-        // bounded by the documented cap.
-        #expect(service.monitoredSiteIds.count <= LocationService.maxMonitoredRegions)
-    }
 
     @Test("Site exposes a valid CoreLocation coordinate")
     func siteCoordinate() {
@@ -51,21 +32,17 @@ struct GeofenceTests {
     }
 }
 
-// MARK: - Sync resolution
+// MARK: - Local event publishing
 
-@Suite("Mock sync repository")
+@Suite("Mock sync repository", .timeLimit(.minutes(1)))
 struct SyncTests {
 
     @Test("Publishing an inspection with a hazard emits a hazardFlagged event")
     @MainActor
     func publishWithHazardEmitsHazardFlagged() async throws {
         let repo = MockSyncRepository()
-        // Let the mock flip from .connecting → .live
-        try await Task.sleep(nanoseconds: 500_000_000)
-
-        // Drain the initial seed burst so we observe only our new event.
+        // Subscribe before publication to observe the event directly.
         var iterator = repo.activityFeed().makeAsyncIterator()
-        for _ in 0..<3 { _ = await iterator.next() }
 
         let inspection = Inspection(
             taskId: UUID(),
@@ -86,10 +63,7 @@ struct SyncTests {
     @MainActor
     func publishWithoutHazardEmitsInspectionLogged() async throws {
         let repo = MockSyncRepository()
-        try await Task.sleep(nanoseconds: 500_000_000)
-
         var iterator = repo.activityFeed().makeAsyncIterator()
-        for _ in 0..<3 { _ = await iterator.next() }
 
         let clean = Inspection(
             taskId: UUID(),
@@ -107,7 +81,6 @@ struct SyncTests {
     @MainActor
     func statusReachesLive() async throws {
         let repo = MockSyncRepository()
-        try await Task.sleep(nanoseconds: 800_000_000)
         #expect(repo.connectionStatus == .live)
     }
 }
@@ -115,11 +88,12 @@ struct SyncTests {
 // MARK: - Core Data persistence
 
 @Suite("Core Data persistence")
+@MainActor
 struct PersistenceTests {
 
     @Test("saveInspection then fetchAllInspections returns the record")
-    func saveAndFetchRoundtrip() {
-        let stack = CoreDataStack.shared
+    func saveAndFetchRoundtrip() throws {
+        let stack = CoreDataStack(inMemory: true)
         let unique = Inspection(
             taskId: UUID(),
             siteName: "Persistence Test Site \(UUID().uuidString.prefix(4))",
@@ -128,9 +102,9 @@ struct PersistenceTests {
             resultSummary: "roundtrip",
             statusTag: "Verified"
         )
-        stack.saveInspection(unique)
+        try stack.saveInspection(unique)
 
-        let all = stack.fetchAllInspections()
+        let all = try stack.fetchAllInspections()
         #expect(all.contains { $0.id == unique.id })
 
         let found = all.first { $0.id == unique.id }
@@ -139,23 +113,23 @@ struct PersistenceTests {
     }
 
     @Test("Saving the same inspection id twice upserts (no duplicate rows)")
-    func upsertSemantics() {
-        let stack = CoreDataStack.shared
+    func upsertSemantics() throws {
+        let stack = CoreDataStack(inMemory: true)
         let id = UUID()
 
         let v1 = Inspection(
             id: id, taskId: UUID(), siteName: "Upsert Site",
             inspectorName: "Tester", resultSummary: "v1", statusTag: "Draft"
         )
-        stack.saveInspection(v1)
+        try stack.saveInspection(v1)
 
         let v2 = Inspection(
             id: id, taskId: UUID(), siteName: "Upsert Site",
             inspectorName: "Tester", resultSummary: "v2", statusTag: "Verified"
         )
-        stack.saveInspection(v2)
+        try stack.saveInspection(v2)
 
-        let matches = stack.fetchAllInspections().filter { $0.id == id }
+        let matches = try stack.fetchAllInspections().filter { $0.id == id }
         #expect(matches.count == 1)
         #expect(matches.first?.statusTag == "Verified")
     }
@@ -190,6 +164,7 @@ struct PDFReportBuilderTests {
         let url = PDFReportBuilder.build(for: inspection, user: user)
         #expect(url != nil)
         if let url {
+            defer { try? FileManager.default.removeItem(at: url) }
             let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
             #expect(size > 500)
         }

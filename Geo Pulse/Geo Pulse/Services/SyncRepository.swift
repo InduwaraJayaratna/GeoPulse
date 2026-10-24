@@ -8,6 +8,7 @@ import Foundation
 /// injection seam) without requiring a Firebase project to be configured.
 /// Swapping in a real `FirestoreSyncRepository` later is a one-line change in
 /// `AppState`.
+@MainActor
 protocol SyncRepository: AnyObject {
     /// Push a completed inspection to the team feed.
     func publish(inspection: Inspection) async
